@@ -312,6 +312,16 @@ ${rows.slice().reverse().map(r => `      <tr>
 
 const app = express();
 
+// CORS — README advertises /api/* as a JSON API; allow cross-origin GETs so
+// frontends on other domains can consume it. Read-only, no credentials,
+// so wildcard origin is safe.
+app.use((_req, res, next) => {
+  res.set('access-control-allow-origin', '*');
+  res.set('access-control-allow-methods', 'GET, OPTIONS');
+  res.set('access-control-allow-headers', 'content-type');
+  next();
+});
+
 app.get('/', (req, res) => {
   const sort = String(req.query.sort || 'profitDiff');
   try {

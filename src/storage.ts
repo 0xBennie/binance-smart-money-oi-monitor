@@ -27,7 +27,11 @@ export interface TopTraderSnapshotRow {
 export interface OISnapshotRow {
   symbol: string; ts: number;
   oiNowUsd: number; oiNowCoins: number;
-  oiChg5m: number; oiChg15m: number; oiChg1h: number; oiChg4h: number;
+  // nullable when the history bar at that lookback isn't available
+  oiChg5m: number | null;
+  oiChg15m: number | null;
+  oiChg1h: number | null;
+  oiChg4h: number | null;
 }
 
 const RETENTION_DAYS = 30;

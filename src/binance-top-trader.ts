@@ -4,8 +4,8 @@
 //
 // Complements binance-smart-money.ts with Taker buy/sell ratio (overview lacks it).
 
-import axios from 'axios';
 import {
+  binanceHttp,
   isBinanceApiBlocked,
   markBinanceApiBlockedWithRetry,
   detectBinanceBlockDetails,
@@ -43,7 +43,7 @@ const cacheKey = (s: string, p: TopTraderPeriod) => `${s}|${p}`;
 
 async function fetchOne(path: string, symbol: string, period: TopTraderPeriod): Promise<any | null> {
   try {
-    const resp = await axios.get(`${FAPI}${path}`, {
+    const resp = await binanceHttp.get(`${FAPI}${path}`, {
       params: { symbol, period, limit: 1 },
       timeout: REQ_TIMEOUT_MS,
     });

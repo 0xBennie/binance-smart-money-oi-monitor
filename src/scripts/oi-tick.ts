@@ -20,6 +20,7 @@ import axios from 'axios';
 import { storage } from '../storage';
 import { getOpenInterestBatch } from '../binance-open-interest';
 import { preflightBinanceFapi } from '../binance-rate-limit';
+import { installGracefulShutdown } from '../cron-utils';
 
 const POOL_MAX    = parseInt(process.env.OI_POOL_MAX    || '0', 10);
 const SHARD_INDEX = parseInt(process.env.OI_SHARD_INDEX || '0', 10);
@@ -49,6 +50,7 @@ async function getAllUsdtPerpetuals(): Promise<string[]> {
 }
 
 async function main(): Promise<void> {
+  installGracefulShutdown('oi-tick');
   const startedAt = Date.now();
 
   storage.init();

@@ -191,22 +191,37 @@ and share one weight budget across modules.
 Default behavior is **all USDT-PERPETUAL symbols** (~500 contracts as of 2026).
 Pick a deployment mode that matches your tolerance for data freshness:
 
-| Mode | Symbols | smart-money cadence | top-trader cadence | Sharding |
-|---|---|---|---|---|
-| **Light** | 100 (cap)  | hourly             | every 30 min | None |
-| **Standard** | 200 (cap) | hourly             | every 30 min | None |
-| **Full, 2h refresh** | ~500 all | every 2 hours    | every 30 min | None |
-| **Full, 1h refresh** | ~500 all | hourly             | every 30 min | **2 shards** |
+| Mode | Symbols | smart-money cron | top-trader cron | OI cron | Sharding |
+|---|---|---|---|---|---|
+| **Light** | 100 cap | `7 * * * *` (1×/h) | `*/30 * * * *` | `15,45 * * * *` | None |
+| **Standard** | 200 cap | `7 * * * *` (1×/h) | `*/30 * * * *` | `15,45 * * * *` | None |
+| **Full, 2h refresh** | ~500 all | `0 */2 * * *` (1×/2h) | `*/30 * * * *` | `15,45 * * * *` | None |
+| **Full, 1h refresh** | ~500 all | `7,37 * * * *` (2×/h, each does half) | `*/30 * * * *` | `15,45 * * * *` | **2 shards** |
+
+Read "1h refresh" as **every symbol gets a fresh snapshot within 1h**, achieved
+by two cron entries at `:07` and `:37` each pulling half (shard 0/2 and 1/2).
 
 The math: smart-money runs at 12s ± 3s spacing (web bapi is rate-sensitive).
 500 symbols ≈ 100 min, so it cannot finish inside an hour without sharding.
-Top-trader uses fapi/data at 1s spacing — 500 symbols ≈ 8 min, fits anywhere.
+Top-trader and OI both use fapi/data at 1s spacing — 500 symbols ≈ 8 min,
+fits anywhere.
 
 ### Sharding
 
 Symbols are split deterministically by `index % SHARD_TOTAL == SHARD_INDEX`,
 so each shard always pulls the same set (good for cache locality, and means
 shards don't collide on the same symbol within a window).
+
+### Data Retention
+
+The sqlite tables (`ob_smart_money_snapshots`, `ob_top_trader_snapshots`,
+`ob_oi_snapshots`) are pruned to **30 days** by the `storage.cleanup()` call
+that runs at the end of every `smart-money-tick` execution. If you need
+longer history, increase `RETENTION_DAYS` in `src/storage.ts` and rebuild,
+or back the table up before the daily cron runs.
+
+Disk usage estimate at default cadence (500 symbols, hourly smart-money +
+30min top-trader + 30min OI): roughly **30–80 MB / month** with WAL enabled.
 
 ## Production deployment (pm2)
 

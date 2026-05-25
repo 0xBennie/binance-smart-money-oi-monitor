@@ -29,6 +29,7 @@ import axios from 'axios';
 import { storage } from '../storage';
 import { getSmartMoneyOverviewBatch } from '../binance-smart-money';
 import { preflightBinanceFapi } from '../binance-rate-limit';
+import { installGracefulShutdown } from '../cron-utils';
 
 const POOL_MAX    = parseInt(process.env.SMART_MONEY_POOL_MAX    || '0', 10); // 0 = unlimited
 const SHARD_INDEX = parseInt(process.env.SMART_MONEY_SHARD_INDEX || '0', 10);
@@ -68,6 +69,7 @@ async function getAllUsdtPerpetuals(): Promise<string[]> {
 }
 
 async function main(): Promise<void> {
+  installGracefulShutdown('smart-money-tick');
   const startedAt = Date.now();
   storage.init();
 
@@ -115,7 +117,7 @@ async function main(): Promise<void> {
   const elapsedS = (Date.now() - startedAt) / 1000;
   console.log(
     `[smart-money-tick] done${shardTag} requested=${pool.length} captured=${snapshots.size} ` +
-    `written=${written} cleaned=${cleaned.smartMoney}+${cleaned.topTrader} elapsed=${elapsedS.toFixed(1)}s`
+    `written=${written} cleaned(sm/tt/oi)=${cleaned.smartMoney}/${cleaned.topTrader}/${cleaned.oi} elapsed=${elapsedS.toFixed(1)}s`
   );
 
   storage.stop();

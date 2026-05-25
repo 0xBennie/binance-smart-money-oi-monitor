@@ -8,8 +8,14 @@
   "scripts": {
     "smart-money:tick": "tsx src/scripts/smart-money-tick.ts",
     "top-trader:tick": "tsx src/scripts/top-trader-tick.ts",
+    "oi:tick": "tsx src/scripts/oi-tick.ts",
     "dashboard": "tsx src/scripts/smart-money-dashboard.ts",
+    "demo": "tsx src/scripts/push-demo.ts",
+    "typecheck": "tsc --noEmit",
     "build": "tsc"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "axios": "^1.7.0",

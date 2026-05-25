@@ -9,8 +9,8 @@
 // Rate limit: web bapi has no published weight. Empirically more sensitive than
 // fapi. Use ≥12s spacing + ±3s jitter + 60-min cron + full circuit-breaker.
 
-import axios from 'axios';
 import {
+  binanceHttp,
   isBinanceApiBlocked,
   markBinanceApiBlockedWithRetry,
   detectBinanceBlockDetails,
@@ -106,7 +106,7 @@ export async function getSmartMoneyOverview(
   await waitForBinanceWeightHeadroom();
 
   try {
-    const resp = await axios.get(SMART_MONEY_URL, {
+    const resp = await binanceHttp.get(SMART_MONEY_URL, {
       params: { symbol },
       headers: REQ_HEADERS,
       timeout: REQ_TIMEOUT_MS,

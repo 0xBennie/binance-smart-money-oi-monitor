@@ -62,24 +62,46 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
   const { symbol, sm, oi } = input;
   const contractType = input.contractType || '永续';
 
-  // markPrice: prefer explicit price, else derive from oi (sumOpenInterestValue / sumOpenInterest)
-  const markPrice = input.price ??
-    (oi.oiNowCoins > 0 ? oi.oiNowUsd / oi.oiNowCoins : NaN);
+  // markPrice resolution order:
+  //   1. explicit input.price (most accurate, from premiumIndex)
+  //   2. derived from OI: sumOpenInterestValue / sumOpenInterest
+  //   3. weighted whale avg-entry (last resort — biased but never NaN)
+  const derivedFromOi = oi.oiNowCoins > 0 && oi.oiNowUsd > 0
+    ? oi.oiNowUsd / oi.oiNowCoins
+    : null;
+  const totalWhaleQty = sm.longWhalesQty + sm.shortWhalesQty;
+  const whaleAvgPrice = totalWhaleQty > 0
+    ? (sm.longWhalesQty * sm.longWhalesAvgEntryPrice
+       + sm.shortWhalesQty * sm.shortWhalesAvgEntryPrice) / totalWhaleQty
+    : null;
+  const markPrice = (Number.isFinite(input.price) && input.price! > 0) ? input.price!
+    : (derivedFromOi && Number.isFinite(derivedFromOi) && derivedFromOi > 0) ? derivedFromOi
+    : (whaleAvgPrice && Number.isFinite(whaleAvgPrice) && whaleAvgPrice > 0) ? whaleAvgPrice
+    : NaN;
 
-  const longUsd = sm.longWhalesQty * markPrice;
-  const shortUsd = sm.shortWhalesQty * markPrice;
-  const totalWhalePosUsd = longUsd + shortUsd;
-  const notionalRatio = shortUsd > 0 ? (longUsd / shortUsd) * 100 : 0;
+  const haveMarkPrice = Number.isFinite(markPrice) && markPrice > 0;
+  const longUsd = haveMarkPrice ? sm.longWhalesQty * markPrice : NaN;
+  const shortUsd = haveMarkPrice ? sm.shortWhalesQty * markPrice : NaN;
+  const totalWhalePosUsd = haveMarkPrice ? longUsd + shortUsd : NaN;
+  // null = "undefined" (no shorts), not zero. Renders as "—".
+  const notionalRatio: number | null = (haveMarkPrice && shortUsd > 0)
+    ? (longUsd / shortUsd) * 100
+    : null;
   const whaleCount = sm.longWhales + sm.shortWhales;
 
-  const longPnl = sm.longWhalesQty * (markPrice - sm.longWhalesAvgEntryPrice);
-  const shortPnl = sm.shortWhalesQty * (sm.shortWhalesAvgEntryPrice - markPrice);
+  const longPnl = haveMarkPrice
+    ? sm.longWhalesQty * (markPrice - sm.longWhalesAvgEntryPrice)
+    : NaN;
+  const shortPnl = haveMarkPrice
+    ? sm.shortWhalesQty * (sm.shortWhalesAvgEntryPrice - markPrice)
+    : NaN;
 
   const longProfitPct = sm.longWhales > 0 ? (sm.longProfitWhales / sm.longWhales) * 100 : 0;
   const shortProfitPct = sm.shortWhales > 0 ? (sm.shortProfitWhales / sm.shortWhales) * 100 : 0;
 
-  const longStatus = longPnl >= 0 ? '📈 盈利中' : '📉 亏损中';
-  const shortStatus = shortPnl >= 0 ? '📈 盈利中' : '📉 亏损中';
+  // Default status to "—" if PnL unknown (markPrice unavailable)
+  const longStatus = !haveMarkPrice ? '—' : (longPnl >= 0 ? '📈 盈利中' : '📉 亏损中');
+  const shortStatus = !haveMarkPrice ? '—' : (shortPnl >= 0 ? '📈 盈利中' : '📉 亏损中');
 
   const lines: string[] = [];
 
@@ -100,8 +122,9 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
 
   // 巨鲸总览
   lines.push('🐋 <b>巨鲸总览</b>');
+  const ratioStr = notionalRatio == null ? '—' : `${notionalRatio.toFixed(2)}%`;
   lines.push(
-    `<code>总持仓 ${fmtUsd(totalWhalePosUsd)}  •  鲸鱼 ${whaleCount}  •  名义多空比 ${notionalRatio.toFixed(2)}%</code>`
+    `<code>总持仓 ${fmtUsd(totalWhalePosUsd)}  •  鲸鱼 ${whaleCount}  •  名义多空比 ${ratioStr}</code>`
   );
   lines.push('');
 

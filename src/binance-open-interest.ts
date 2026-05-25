@@ -10,8 +10,8 @@
 // request, then compute 5m/15m/1h/4h velocities client-side. One API call
 // per symbol, ~1s spacing, ~500 symbols ≈ 8 minutes.
 
-import axios from 'axios';
 import {
+  binanceHttp,
   isBinanceApiBlocked,
   markBinanceApiBlockedWithRetry,
   detectBinanceBlockDetails,
@@ -26,12 +26,13 @@ const REQ_TIMEOUT_MS = 5_000;
 export interface OpenInterestSnapshot {
   symbol: string;
   ts: number;
-  oiNowUsd: number;       // sumOpenInterestValue, USD
-  oiNowCoins: number;     // sumOpenInterest, base-asset units
-  oiChg5m: number;        // % change vs ~5min ago
-  oiChg15m: number;       // % change vs ~15min ago
-  oiChg1h: number;        // % change vs ~1h ago
-  oiChg4h: number;        // % change vs ~4h ago (= 48 × 5min bars)
+  oiNowUsd: number;            // sumOpenInterestValue, USD
+  oiNowCoins: number;          // sumOpenInterest, base-asset units
+  /** % change vs ~5min ago. null = history bar missing, NOT zero change. */
+  oiChg5m: number | null;
+  oiChg15m: number | null;
+  oiChg1h: number | null;
+  oiChg4h: number | null;      // 4h = 47 × 5min bars back
 }
 
 interface CachedOI { snap: OpenInterestSnapshot; fetchedAt: number; }
@@ -44,8 +45,10 @@ interface HistBar {
   timestamp: number;
 }
 
-function pctChange(curr: number, prev: number): number {
-  if (!prev || !Number.isFinite(prev) || !Number.isFinite(curr)) return 0;
+/** Returns null when prev is missing/invalid — caller should NOT substitute 0. */
+function pctChange(curr: number, prev: number | null): number | null {
+  if (prev == null || !Number.isFinite(prev) || prev <= 0) return null;
+  if (!Number.isFinite(curr)) return null;
   return ((curr - prev) / prev) * 100;
 }
 
@@ -57,7 +60,7 @@ export async function getOpenInterest(symbol: string): Promise<OpenInterestSnaps
   await waitForBinanceWeightHeadroom();
 
   try {
-    const resp = await axios.get(OI_HIST_URL, {
+    const resp = await binanceHttp.get(OI_HIST_URL, {
       params: { symbol, period: '5m', limit: 48 },  // 48 × 5min = 4h
       timeout: REQ_TIMEOUT_MS,
     });
@@ -88,10 +91,11 @@ export async function getOpenInterest(symbol: string): Promise<OpenInterestSnaps
       ts: Number(latest.timestamp ?? Date.now()),
       oiNowUsd,
       oiNowCoins,
-      oiChg5m: pctChange(oiNowUsd, refUsd(1) ?? oiNowUsd),
-      oiChg15m: pctChange(oiNowUsd, refUsd(3) ?? oiNowUsd),
-      oiChg1h: pctChange(oiNowUsd, refUsd(12) ?? oiNowUsd),
-      oiChg4h: pctChange(oiNowUsd, refUsd(47) ?? oiNowUsd),
+      // pass refUsd() result through unchanged — pctChange returns null on missing
+      oiChg5m: pctChange(oiNowUsd, refUsd(1)),
+      oiChg15m: pctChange(oiNowUsd, refUsd(3)),
+      oiChg1h: pctChange(oiNowUsd, refUsd(12)),
+      oiChg4h: pctChange(oiNowUsd, refUsd(47)),
     };
     cache.set(symbol, { snap, fetchedAt: Date.now() });
     return snap;

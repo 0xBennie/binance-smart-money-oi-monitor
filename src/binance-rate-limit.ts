@@ -132,9 +132,27 @@ export async function waitForBinanceWeightHeadroom(): Promise<void> {
   }
 }
 
-// ── Preflight ────────────────────────────────────────────────────────────────
+// ── Preflight + shared axios ─────────────────────────────────────────────────
 
 import axios from 'axios';
+import https from 'node:https';
+import http from 'node:http';
+
+/**
+ * Shared axios instance with HTTP keep-alive. Every client in this repo
+ * (smart-money, top-trader, oi, ticker) should import { binanceHttp } from
+ * here instead of using bare axios.
+ *
+ * Why: bare axios.get() creates a new TCP+TLS connection per call. Pulling
+ * 500 symbols × 4 endpoints = 2000 fresh handshakes per cycle, which both
+ * (a) costs ~50ms per call to TLS, and (b) looks like a scan to Binance's
+ * WAF. Reusing one socket pool drops handshake cost to near-zero and
+ * presents as a normal browser-style keep-alive client.
+ */
+export const binanceHttp = axios.create({
+  httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 8, maxFreeSockets: 4 }),
+  httpAgent: new http.Agent({ keepAlive: true, maxSockets: 8, maxFreeSockets: 4 }),
+});
 
 /**
  * Pre-flight check: ping fapi once before a cron starts.
@@ -150,7 +168,7 @@ export async function preflightBinanceFapi(): Promise<boolean> {
     return false;
   }
   try {
-    const resp = await axios.get('https://fapi.binance.com/fapi/v1/ping', { timeout: 5_000 });
+    const resp = await binanceHttp.get('https://fapi.binance.com/fapi/v1/ping', { timeout: 5_000 });
     updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
     return true;
   } catch (e: any) {

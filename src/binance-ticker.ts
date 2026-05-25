@@ -8,8 +8,8 @@
 // than /futures/data/*. Use sparingly (per-symbol on demand, not in a tight
 // scan loop) and let the shared circuit breaker do its job.
 
-import axios from 'axios';
 import {
+  binanceHttp,
   isBinanceApiBlocked,
   markBinanceApiBlockedWithRetry,
   detectBinanceBlockDetails,
@@ -50,7 +50,7 @@ export async function getTicker24h(symbol: string): Promise<TickerInfo | null> {
   await waitForBinanceWeightHeadroom();
 
   try {
-    const resp = await axios.get(TICKER_24H_URL, {
+    const resp = await binanceHttp.get(TICKER_24H_URL, {
       params: { symbol },
       timeout: REQ_TIMEOUT_MS,
     });
@@ -80,7 +80,7 @@ export async function getFundingInfo(symbol: string): Promise<FundingInfo | null
   await waitForBinanceWeightHeadroom();
 
   try {
-    const resp = await axios.get(PREMIUM_INDEX_URL, {
+    const resp = await binanceHttp.get(PREMIUM_INDEX_URL, {
       params: { symbol },
       timeout: REQ_TIMEOUT_MS,
     });
