@@ -4,6 +4,8 @@
 export {
   getSmartMoneyOverview,
   getSmartMoneyOverviewBatch,
+  smartMoneyNotionalUsd,
+  smartMoneyShareOfOI,
   type SmartMoneyOverview,
 } from './binance-smart-money';
 

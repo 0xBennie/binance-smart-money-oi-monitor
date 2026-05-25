@@ -147,6 +147,8 @@ import {
   getSmartMoneyOverview,
   getTopTraderSnapshot,
   getOpenInterest,
+  smartMoneyNotionalUsd,
+  smartMoneyShareOfOI,
 } from 'binance-smart-money-tracker';
 
 const sym = 'BTCUSDT';
@@ -160,9 +162,22 @@ if (sm && oi) {
   console.log(`${sm.longWhales} long whales @ avg ${sm.longWhalesAvgEntryPrice}`);
   console.log(`${sm.longProfitTraders}/${sm.longTraders} longs in profit`);
   console.log(`Total OI: $${(oi.oiNowUsd / 1e6).toFixed(2)}M, 4h chg ${oi.oiChg4h.toFixed(2)}%`);
-  console.log(`Smart Money share of total OI: ${(sm.totalPositions / oi.oiNowUsd * 100).toFixed(1)}%`);
+
+  // Smart Money USD notional, derived from qty × avg-entry (NOT from the
+  // undocumented `totalPositions` field whose unit is inconsistent).
+  const smUsd = smartMoneyNotionalUsd(sm);
+  const share = smartMoneyShareOfOI(sm, oi.oiNowUsd);
+  console.log(`Smart Money notional: $${(smUsd / 1e6).toFixed(2)}M`);
+  console.log(`Smart Money share of total OI: ${share == null ? 'n/a' : (share * 100).toFixed(1) + '%'}`);
 }
 ```
+
+> **Why a helper?** Binance's undocumented `totalPositions` field has
+> inconsistent units across symbols (sometimes base-coin units, sometimes USD).
+> `smartMoneyNotionalUsd(sm)` computes it deterministically from
+> `longTradersQty × longTradersAvgEntryPrice + shortTradersQty × shortTradersAvgEntryPrice`
+> — both fields have known units (base-coin × USD = USD). Don't divide
+> `totalPositions` by anything; use the helper.
 
 The library re-exports all rate-limit helpers
 (`isBinanceApiBlocked`, `preflightBinanceFapi`, `waitForBinanceWeightHeadroom`)

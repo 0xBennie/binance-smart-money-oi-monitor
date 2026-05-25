@@ -14,6 +14,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { storage } from '../storage';
+import { smartMoneyNotionalUsd } from '../binance-smart-money';
 
 const PORT = parseInt(process.env.SMART_MONEY_DASHBOARD_PORT || process.env.PORT || '3001', 10);
 
@@ -40,10 +41,11 @@ interface EnrichedRow extends SnapRow {
   profitDiff: number;
   whaleProfitDiff: number;
   whalePriceSpread: number;
-  // Smart Money's share of total market OI (0..1). Null if OI missing.
-  // Estimated as (totalPositions in USD) / oi_now_usd. binance returns
-  // totalPositions in base coin units for some symbols and USD for others; this
-  // is approximate but useful as a relative-magnitude indicator.
+  // Smart Money notional in USD, derived from longTradersQty × avgEntry +
+  // shortTradersQty × avgEntry (NOT from `totalPositions` whose unit is
+  // ambiguous in binance's response).
+  smNotionalUsd: number;
+  // Share of total market OI (0..1), null if OI snapshot missing.
   smRatio: number | null;
 }
 
@@ -79,8 +81,25 @@ function getLatestSnapshots(): EnrichedRow[] {
       const spread = r.long_whales_avg_entry_price
         ? (r.short_whales_avg_entry_price - r.long_whales_avg_entry_price) / r.long_whales_avg_entry_price
         : 0;
-      const smRatio = r.oi_now_usd && r.oi_now_usd > 0
-        ? r.total_positions / r.oi_now_usd
+      // Derive SM USD notional from quantity × avg-entry (units are known),
+      // not from `totalPositions` (binance returns inconsistent units).
+      const smNotionalUsd = smartMoneyNotionalUsd({
+        symbol: r.symbol, ts: r.ts,
+        totalPositions: r.total_positions, totalTraders: r.total_traders,
+        longShortRatio: r.long_short_ratio,
+        longTraders: r.long_traders, longTradersQty: r.long_traders_qty,
+        longTradersAvgEntryPrice: r.long_traders_avg_entry_price,
+        shortTraders: r.short_traders, shortTradersQty: r.short_traders_qty,
+        shortTradersAvgEntryPrice: r.short_traders_avg_entry_price,
+        longWhales: r.long_whales, longWhalesQty: r.long_whales_qty,
+        longWhalesAvgEntryPrice: r.long_whales_avg_entry_price,
+        shortWhales: r.short_whales, shortWhalesQty: r.short_whales_qty,
+        shortWhalesAvgEntryPrice: r.short_whales_avg_entry_price,
+        longProfitTraders: r.long_profit_traders, shortProfitTraders: r.short_profit_traders,
+        longProfitWhales: r.long_profit_whales, shortProfitWhales: r.short_profit_whales,
+      });
+      const smRatio = r.oi_now_usd && r.oi_now_usd > 0 && smNotionalUsd > 0
+        ? smNotionalUsd / r.oi_now_usd
         : null;
       return {
         ...r,
@@ -91,6 +110,7 @@ function getLatestSnapshots(): EnrichedRow[] {
         profitDiff: Math.abs(sp - lp),
         whaleProfitDiff: Math.abs(swp - lwp),
         whalePriceSpread: spread,
+        smNotionalUsd,
         smRatio,
       };
     });
@@ -145,6 +165,7 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
     oi:           (a, b) => (b.oi_now_usd ?? 0) - (a.oi_now_usd ?? 0),
     oiChg1h:      (a, b) => Math.abs(b.oi_chg_1h ?? 0) - Math.abs(a.oi_chg_1h ?? 0),
     oiChg4h:      (a, b) => Math.abs(b.oi_chg_4h ?? 0) - Math.abs(a.oi_chg_4h ?? 0),
+    smShare:      (a, b) => (b.smRatio ?? 0) - (a.smRatio ?? 0),
   };
   const sortFn = sorters[sort] || sorters.profitDiff;
   const sorted = [...rows].sort(sortFn);
@@ -171,6 +192,7 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
         <td>${fmtOiUsd(r.oi_now_usd)}</td>
         <td ${chgClass(r.oi_chg_1h)}>${fmtChg(r.oi_chg_1h)}</td>
         <td ${chgClass(r.oi_chg_4h)}>${fmtChg(r.oi_chg_4h)}</td>
+        <td>${r.smRatio == null ? '—' : fmtPct(r.smRatio * 100, 1)}</td>
         <td>${verdict}</td>
         <td class="ts">${fmtTs(r.ts)}</td>
       </tr>`;
@@ -216,6 +238,7 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
     ${sortLink('oi', 'OI (USD)')}
     ${sortLink('oiChg1h', 'OI Δ 1h')}
     ${sortLink('oiChg4h', 'OI Δ 4h')}
+    ${sortLink('smShare', 'SM Share')}
     ${sortLink('symbol', 'A-Z')}
   </div>
   <table>
@@ -233,6 +256,7 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
       <th>OI</th>
       <th>OI Δ1h</th>
       <th>OI Δ4h</th>
+      <th>SM Share</th>
       <th>Verdict</th>
       <th>Updated</th>
     </tr></thead>

@@ -126,6 +126,46 @@ export async function getSmartMoneyOverview(
 }
 
 /**
+ * Compute Smart Money's notional position value in USD.
+ *
+ * Why this exists: binance's `totalPositions` field is undocumented and its
+ * unit is inconsistent across symbols (sometimes base-coin units, sometimes
+ * USD). Don't use it for math.
+ *
+ * Instead, derive USD notional from fields with known units:
+ *   long_USD  = longTradersQty (base-coin) × longTradersAvgEntryPrice (USD)
+ *   short_USD = shortTradersQty × shortTradersAvgEntryPrice
+ *   total_USD = long_USD + short_USD
+ *
+ * This is the long-side + short-side gross notional, which is what you compare
+ * against `openInterestHist.sumOpenInterestValue` (also gross notional in USD).
+ */
+export function smartMoneyNotionalUsd(sm: SmartMoneyOverview): number {
+  const long = sm.longTradersQty * sm.longTradersAvgEntryPrice;
+  const short = sm.shortTradersQty * sm.shortTradersAvgEntryPrice;
+  return long + short;
+}
+
+/**
+ * Smart Money's share of total market Open Interest (0..1).
+ * Returns null if OI snapshot is missing or invalid.
+ *
+ * Interpretation:
+ *   < 0.05  : SM is a small player, signals lag the broader market
+ *   0.05–0.20 : typical for liquid majors
+ *   > 0.30  : SM dominates the orderbook, price discovery follows SM positioning
+ */
+export function smartMoneyShareOfOI(
+  sm: SmartMoneyOverview,
+  oiNowUsd: number | null | undefined
+): number | null {
+  if (!oiNowUsd || oiNowUsd <= 0) return null;
+  const smUsd = smartMoneyNotionalUsd(sm);
+  if (!Number.isFinite(smUsd) || smUsd <= 0) return null;
+  return smUsd / oiNowUsd;
+}
+
+/**
  * Batch (cron use): serial + spacing + jitter, abort immediately on circuit-break.
  * 12s spacing × ±3s jitter is the empirical safe rate for web bapi.
  */
