@@ -1,0 +1,275 @@
+/**
+ * Smart Money Dashboard — server-side rendered, single-file Express app.
+ *
+ * Usage:
+ *   PORT=3001 tsx src/scripts/smart-money-dashboard.ts
+ *
+ * Routes:
+ *   GET /                          — HTML dashboard with sortable table
+ *   GET /symbol/:symbol            — single-symbol 30d history
+ *   GET /api/snapshots             — JSON of all latest snapshots
+ *   GET /api/symbol/:symbol/history?days=30  — single symbol history JSON
+ *   GET /health                    — health probe
+ */
+import 'dotenv/config';
+import express from 'express';
+import { storage } from '../storage';
+
+const PORT = parseInt(process.env.SMART_MONEY_DASHBOARD_PORT || process.env.PORT || '3001', 10);
+
+interface SnapRow {
+  symbol: string;
+  ts: number;
+  total_positions: number; total_traders: number; long_short_ratio: number;
+  long_traders: number; long_traders_qty: number; long_traders_avg_entry_price: number;
+  short_traders: number; short_traders_qty: number; short_traders_avg_entry_price: number;
+  long_whales: number; long_whales_qty: number; long_whales_avg_entry_price: number;
+  short_whales: number; short_whales_qty: number; short_whales_avg_entry_price: number;
+  long_profit_traders: number; short_profit_traders: number;
+  long_profit_whales: number; short_profit_whales: number;
+}
+
+interface EnrichedRow extends SnapRow {
+  longProfitPct: number;
+  shortProfitPct: number;
+  longWhaleProfitPct: number;
+  shortWhaleProfitPct: number;
+  profitDiff: number;
+  whaleProfitDiff: number;
+  whalePriceSpread: number;
+}
+
+function getLatestSnapshots(): EnrichedRow[] {
+  const db = storage.getDbReadonly();
+  try {
+    const rows = db.prepare(`
+      SELECT s.* FROM ob_smart_money_snapshots s
+      INNER JOIN (
+        SELECT symbol, MAX(ts) AS max_ts
+        FROM ob_smart_money_snapshots
+        GROUP BY symbol
+      ) latest ON s.symbol = latest.symbol AND s.ts = latest.max_ts
+      ORDER BY s.symbol
+    `).all() as SnapRow[];
+
+    return rows.map(r => {
+      const lp = r.long_traders ? r.long_profit_traders / r.long_traders : 0;
+      const sp = r.short_traders ? r.short_profit_traders / r.short_traders : 0;
+      const lwp = r.long_whales ? r.long_profit_whales / r.long_whales : 0;
+      const swp = r.short_whales ? r.short_profit_whales / r.short_whales : 0;
+      const spread = r.long_whales_avg_entry_price
+        ? (r.short_whales_avg_entry_price - r.long_whales_avg_entry_price) / r.long_whales_avg_entry_price
+        : 0;
+      return {
+        ...r,
+        longProfitPct: lp,
+        shortProfitPct: sp,
+        longWhaleProfitPct: lwp,
+        shortWhaleProfitPct: swp,
+        profitDiff: Math.abs(sp - lp),
+        whaleProfitDiff: Math.abs(swp - lwp),
+        whalePriceSpread: spread,
+      };
+    });
+  } finally {
+    db.close();
+  }
+}
+
+function getSymbolHistory(symbol: string, days = 30): SnapRow[] {
+  const db = storage.getDbReadonly();
+  try {
+    return db.prepare(`
+      SELECT * FROM ob_smart_money_snapshots
+      WHERE symbol = ? AND ts > ?
+      ORDER BY ts ASC
+    `).all(symbol, Date.now() - days * 86400_000) as SnapRow[];
+  } finally {
+    db.close();
+  }
+}
+
+const fmtPct = (v: number, digits = 0) => (v * 100).toFixed(digits) + '%';
+const fmtNum = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 4 });
+const fmtTs  = (ts: number) => new Date(ts).toISOString().slice(0, 19).replace('T', ' ');
+
+function renderHtml(rows: EnrichedRow[], sort: string): string {
+  const sorters: Record<string, (a: EnrichedRow, b: EnrichedRow) => number> = {
+    symbol:       (a, b) => a.symbol.localeCompare(b.symbol),
+    profitDiff:   (a, b) => b.profitDiff - a.profitDiff,
+    whaleDiff:    (a, b) => b.whaleProfitDiff - a.whaleProfitDiff,
+    priceSpread:  (a, b) => Math.abs(b.whalePriceSpread) - Math.abs(a.whalePriceSpread),
+    longShort:    (a, b) => Math.abs(b.long_short_ratio - 1) - Math.abs(a.long_short_ratio - 1),
+    whales:       (a, b) => (b.long_whales + b.short_whales) - (a.long_whales + a.short_whales),
+  };
+  const sortFn = sorters[sort] || sorters.profitDiff;
+  const sorted = [...rows].sort(sortFn);
+
+  const trs = sorted.map(r => {
+    const verdict =
+      r.shortProfitPct - r.longProfitPct > 0.2 ? '🔴 空头大赢 (跌)' :
+      r.longProfitPct - r.shortProfitPct > 0.2 ? '🟢 多头大赢 (涨)' :
+      r.shortProfitPct - r.longProfitPct > 0.1 ? '🟡 空头略优' :
+      r.longProfitPct - r.shortProfitPct > 0.1 ? '🟡 多头略优' : '⚪ 势均';
+    const spreadStyle = r.whalePriceSpread > 0.05 ? 'color:#ef4444' : r.whalePriceSpread < -0.05 ? 'color:#22c55e' : '';
+    return `
+      <tr>
+        <td><a href="/symbol/${r.symbol}">${r.symbol}</a></td>
+        <td>${r.long_traders + r.short_traders} (W ${r.long_whales + r.short_whales})</td>
+        <td>${r.long_short_ratio.toFixed(2)}</td>
+        <td class="g">${fmtPct(r.longProfitPct)}</td>
+        <td class="r">${fmtPct(r.shortProfitPct)}</td>
+        <td class="g">${fmtPct(r.longWhaleProfitPct)}</td>
+        <td class="r">${fmtPct(r.shortWhaleProfitPct)}</td>
+        <td>${fmtNum(r.long_whales_avg_entry_price)}</td>
+        <td>${fmtNum(r.short_whales_avg_entry_price)}</td>
+        <td style="${spreadStyle}">${fmtPct(r.whalePriceSpread, 1)}</td>
+        <td>${verdict}</td>
+        <td class="ts">${fmtTs(r.ts)}</td>
+      </tr>`;
+  }).join('');
+
+  const sortLink = (key: string, label: string) =>
+    `<a href="?sort=${key}" class="${sort === key ? 'active' : ''}">${label}</a>`;
+
+  return `<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><title>Smart Money Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  body { font: 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif; background:#0a0a0a; color:#e4e4e7; margin:0; padding:16px; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  .meta { color:#71717a; font-size:12px; margin-bottom:12px; }
+  .sortbar { margin-bottom:8px; display:flex; gap:12px; flex-wrap:wrap; font-size:12px; }
+  .sortbar a { color:#71717a; text-decoration:none; padding:2px 6px; border-radius:4px; }
+  .sortbar a.active { color:#fafafa; background:#27272a; }
+  .sortbar a:hover { color:#fafafa; }
+  table { border-collapse:collapse; width:100%; font-size:12px; }
+  th, td { padding:6px 8px; text-align:right; border-bottom:1px solid #18181b; white-space:nowrap; }
+  th { background:#18181b; color:#a1a1aa; font-weight:500; text-align:right; position:sticky; top:0; }
+  th:first-child, td:first-child { text-align:left; }
+  td:first-child a { color:#60a5fa; text-decoration:none; font-weight:500; }
+  td:first-child a:hover { text-decoration:underline; }
+  td.g { color:#86efac; }
+  td.r { color:#fca5a5; }
+  td.ts { color:#52525b; font-size:11px; }
+  tr:hover { background:#18181b; }
+</style></head>
+<body>
+  <h1>Smart Money Dashboard</h1>
+  <div class="meta">${sorted.length} symbols · source: <code>binance bapi/futures/v1/public/future/smart-money/signal/overview</code> · refresh hourly</div>
+  <div class="sortbar">
+    <span style="color:#a1a1aa">sort:</span>
+    ${sortLink('profitDiff', 'Profit Diff')}
+    ${sortLink('whaleDiff', 'Whale Profit Diff')}
+    ${sortLink('priceSpread', 'Whale Avg Spread')}
+    ${sortLink('longShort', 'LSR Extreme')}
+    ${sortLink('whales', 'Whale Count')}
+    ${sortLink('symbol', 'A-Z')}
+  </div>
+  <table>
+    <thead><tr>
+      <th>Symbol</th>
+      <th>Traders (Whales)</th>
+      <th>LSR</th>
+      <th>Long Profit%</th>
+      <th>Short Profit%</th>
+      <th>Long Whale Profit%</th>
+      <th>Short Whale Profit%</th>
+      <th>Long Whale Avg</th>
+      <th>Short Whale Avg</th>
+      <th>Spread</th>
+      <th>Verdict</th>
+      <th>Updated</th>
+    </tr></thead>
+    <tbody>${trs}</tbody>
+  </table>
+</body></html>`;
+}
+
+function renderSymbolHistoryHtml(symbol: string, rows: SnapRow[]): string {
+  return `<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><title>${symbol} — Smart Money History</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif; background:#0a0a0a; color:#e4e4e7; margin:0; padding:16px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .meta { color:#71717a; font-size:12px; margin-bottom:12px; }
+  a { color:#60a5fa; }
+  table { border-collapse:collapse; width:100%; font-size:11px; margin-top:12px; }
+  th,td { padding:4px 8px; border-bottom:1px solid #18181b; text-align:right; }
+  th:first-child,td:first-child { text-align:left; }
+  th { color:#a1a1aa; background:#18181b; }
+</style></head>
+<body>
+  <h1><a href="/">←</a> ${symbol}</h1>
+  <div class="meta">${rows.length} snapshots · 30 day history</div>
+  <table>
+    <thead><tr>
+      <th>Time</th>
+      <th>LSR</th>
+      <th>Long/Short traders</th>
+      <th>Long/Short whales</th>
+      <th>Long Profit%</th>
+      <th>Short Profit%</th>
+      <th>Long Whale Avg</th>
+      <th>Short Whale Avg</th>
+    </tr></thead>
+    <tbody>
+${rows.slice().reverse().map(r => `      <tr>
+        <td>${fmtTs(r.ts)}</td>
+        <td>${r.long_short_ratio.toFixed(2)}</td>
+        <td>${r.long_traders}/${r.short_traders}</td>
+        <td>${r.long_whales}/${r.short_whales}</td>
+        <td style="color:#86efac">${fmtPct(r.long_profit_traders / Math.max(r.long_traders, 1))}</td>
+        <td style="color:#fca5a5">${fmtPct(r.short_profit_traders / Math.max(r.short_traders, 1))}</td>
+        <td>${fmtNum(r.long_whales_avg_entry_price)}</td>
+        <td>${fmtNum(r.short_whales_avg_entry_price)}</td>
+      </tr>`).join('\n')}
+    </tbody>
+  </table>
+</body></html>`;
+}
+
+const app = express();
+
+app.get('/', (req, res) => {
+  const sort = String(req.query.sort || 'profitDiff');
+  try {
+    const rows = getLatestSnapshots();
+    res.set('content-type', 'text/html; charset=utf-8').send(renderHtml(rows, sort));
+  } catch (e: any) {
+    res.status(500).send(`<pre>${e.message}</pre>`);
+  }
+});
+
+app.get('/symbol/:symbol', (req, res) => {
+  const sym = req.params.symbol.toUpperCase();
+  try {
+    const rows = getSymbolHistory(sym);
+    if (rows.length === 0) {
+      res.status(404).send(`<pre>no data for ${sym}</pre>`);
+      return;
+    }
+    res.set('content-type', 'text/html; charset=utf-8').send(renderSymbolHistoryHtml(sym, rows));
+  } catch (e: any) {
+    res.status(500).send(`<pre>${e.message}</pre>`);
+  }
+});
+
+app.get('/api/snapshots', (_req, res) => {
+  res.json(getLatestSnapshots());
+});
+
+app.get('/api/symbol/:symbol/history', (req, res) => {
+  const days = parseInt(String(req.query.days || '30'), 10);
+  res.json(getSymbolHistory(req.params.symbol.toUpperCase(), days));
+});
+
+app.get('/health', (_req, res) => res.json({ ok: true, port: PORT }));
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[SmartMoneyDashboard] listening on http://0.0.0.0:${PORT}`);
+});
