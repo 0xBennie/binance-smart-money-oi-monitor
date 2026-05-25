@@ -127,12 +127,14 @@ PORT=3001 npx tsx src/scripts/smart-money-dashboard.ts
 npx tsx src/scripts/top-trader-tick.ts
 ```
 
-### Tweaks
+### Env vars
 
-| Env var | Default | What |
+| Var | Default | What |
 |---|---|---|
-| `SMART_MONEY_POOL_MAX` | `150` | Cap of USDT-PERPETUAL symbols pulled per cron |
-| `TOP_TRADER_POOL_MAX` | `150` | Same for top-trader cron |
+| `SMART_MONEY_POOL_MAX` | `0` | Cap of symbols. **0 = all USDT-PERPETUAL** (~500). Set to e.g. `100` to limit |
+| `SMART_MONEY_SHARD_INDEX` | `0` | 0-based shard index when sharding (see below) |
+| `SMART_MONEY_SHARD_TOTAL` | `1` | Total shards. `1` = no sharding |
+| `TOP_TRADER_POOL_MAX` / `_SHARD_INDEX` / `_SHARD_TOTAL` | same | Same semantics for top-trader cron |
 | `SMART_MONEY_DASHBOARD_PORT` / `PORT` | `3001` | Dashboard listen port |
 
 ### As a library
@@ -154,7 +156,31 @@ and share one weight budget across modules.
 
 ---
 
+## Pool sizing & cron cadence
+
+Default behavior is **all USDT-PERPETUAL symbols** (~500 contracts as of 2026).
+Pick a deployment mode that matches your tolerance for data freshness:
+
+| Mode | Symbols | smart-money cadence | top-trader cadence | Sharding |
+|---|---|---|---|---|
+| **Light** | 100 (cap)  | hourly             | every 30 min | None |
+| **Standard** | 200 (cap) | hourly             | every 30 min | None |
+| **Full, 2h refresh** | ~500 all | every 2 hours    | every 30 min | None |
+| **Full, 1h refresh** | ~500 all | hourly             | every 30 min | **2 shards** |
+
+The math: smart-money runs at 12s ± 3s spacing (web bapi is rate-sensitive).
+500 symbols ≈ 100 min, so it cannot finish inside an hour without sharding.
+Top-trader uses fapi/data at 1s spacing — 500 symbols ≈ 8 min, fits anywhere.
+
+### Sharding
+
+Symbols are split deterministically by `index % SHARD_TOTAL == SHARD_INDEX`,
+so each shard always pulls the same set (good for cache locality, and means
+shards don't collide on the same symbol within a window).
+
 ## Production deployment (pm2)
+
+### A. Standard — cap at 200, hourly
 
 ```js
 // ecosystem.config.js
@@ -164,14 +190,15 @@ module.exports = {
       name: 'smart-money-tick',
       script: 'node_modules/.bin/tsx',
       args: 'src/scripts/smart-money-tick.ts',
-      cron_restart: '7 * * * *',       // :07 every hour
+      cron_restart: '7 * * * *',        // :07 every hour
       autorestart: false,
+      env: { SMART_MONEY_POOL_MAX: '200' },
     },
     {
       name: 'top-trader-tick',
       script: 'node_modules/.bin/tsx',
       args: 'src/scripts/top-trader-tick.ts 5m',
-      cron_restart: '*/30 * * * *',    // every 30 min
+      cron_restart: '*/30 * * * *',
       autorestart: false,
     },
     {
@@ -185,10 +212,56 @@ module.exports = {
 };
 ```
 
-Stagger the crons (`:07` vs `:00/:30`) so they don't bunch onto the same IP
-weight window. They share the same circuit breaker state inside a single
-process — across processes (separate pm2 entries) the preflight ping
-re-syncs state on each invocation, so they're safe.
+### B. Full coverage with 1h refresh — 2-way sharding
+
+Two pm2 entries, each pulls half the symbols at staggered times:
+
+```js
+module.exports = {
+  apps: [
+    {
+      name: 'smart-money-tick-a',
+      script: 'node_modules/.bin/tsx',
+      args: 'src/scripts/smart-money-tick.ts',
+      cron_restart: '7 * * * *',        // :07
+      autorestart: false,
+      env: { SMART_MONEY_SHARD_INDEX: '0', SMART_MONEY_SHARD_TOTAL: '2' },
+    },
+    {
+      name: 'smart-money-tick-b',
+      script: 'node_modules/.bin/tsx',
+      args: 'src/scripts/smart-money-tick.ts',
+      cron_restart: '37 * * * *',       // :37 — 30 min offset from A
+      autorestart: false,
+      env: { SMART_MONEY_SHARD_INDEX: '1', SMART_MONEY_SHARD_TOTAL: '2' },
+    },
+    // ... top-trader-tick and dashboard same as Mode A
+  ],
+};
+```
+
+### C. Full coverage, slower refresh — 2-hour cron, no sharding
+
+Cheapest option if hourly freshness isn't required:
+
+```js
+{
+  name: 'smart-money-tick',
+  args: 'src/scripts/smart-money-tick.ts',
+  cron_restart: '0 */2 * * *',          // every 2 hours
+  autorestart: false,
+  // no env vars needed — defaults to all symbols
+}
+```
+
+### Why staggering matters
+
+The circuit breaker lives in per-process module state. Two cron processes
+running simultaneously cannot share `isBinanceApiBlocked()` state directly,
+but each one ping-tests via `preflightBinanceFapi()` before issuing any
+data requests — so if process A just got a 418, process B's preflight will
+catch it and abort cleanly. Stagger the times anyway to give the IP weight
+window time to drain between bursts.
 
 ---
 
