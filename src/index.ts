@@ -15,6 +15,12 @@ export {
 } from './binance-top-trader';
 
 export {
+  getOpenInterest,
+  getOpenInterestBatch,
+  type OpenInterestSnapshot,
+} from './binance-open-interest';
+
+export {
   isBinanceApiBlocked,
   markBinanceApiBlocked,
   markBinanceApiBlockedWithRetry,
@@ -28,4 +34,4 @@ export {
 } from './binance-rate-limit';
 
 export { storage } from './storage';
-export type { SmartMoneySnapshotRow, TopTraderSnapshotRow } from './storage';
+export type { SmartMoneySnapshotRow, TopTraderSnapshotRow, OISnapshotRow } from './storage';

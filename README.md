@@ -25,9 +25,11 @@ burst can cost you a 4-hour `Retry-After`. This repo solves that.
 | `longShortRatio` | ✅ via `topLongShortPositionRatio` | ✅ |
 | Top 20% account/position long-short ratios | ✅ | ✅ (bonus: also pulled) |
 | Taker buy/sell ratio | ✅ | ✅ (bonus: also pulled) |
+| Total Open Interest (USD) + 5m/15m/1h/4h velocity | ✅ | ✅ (bonus: also pulled) |
 | **`longWhalesAvgEntryPrice` / `shortWhalesAvgEntryPrice`** | ❌ | ✅ |
 | **`longProfitTraders` / `shortProfitTraders`** (in-profit count) | ❌ | ✅ |
 | **`longProfitWhales` / `shortProfitWhales`** | ❌ | ✅ |
+| **Smart Money's share of total market OI** (derived) | ❌ | ✅ |
 
 The four ★ fields are what makes Smart Signal useful — they tell you not just
 *which side has more positions*, but *which side is actually making money right
@@ -135,17 +137,30 @@ npx tsx src/scripts/top-trader-tick.ts
 | `SMART_MONEY_SHARD_INDEX` | `0` | 0-based shard index when sharding (see below) |
 | `SMART_MONEY_SHARD_TOTAL` | `1` | Total shards. `1` = no sharding |
 | `TOP_TRADER_POOL_MAX` / `_SHARD_INDEX` / `_SHARD_TOTAL` | same | Same semantics for top-trader cron |
+| `OI_POOL_MAX` / `_SHARD_INDEX` / `_SHARD_TOTAL` | same | Same for open-interest cron |
 | `SMART_MONEY_DASHBOARD_PORT` / `PORT` | `3001` | Dashboard listen port |
 
 ### As a library
 
 ```ts
-import { getSmartMoneyOverview } from 'binance-smart-money-tracker';
+import {
+  getSmartMoneyOverview,
+  getTopTraderSnapshot,
+  getOpenInterest,
+} from 'binance-smart-money-tracker';
 
-const snap = await getSmartMoneyOverview('BTCUSDT');
-if (snap) {
-  console.log(`${snap.longWhales} long whales @ avg ${snap.longWhalesAvgEntryPrice}`);
-  console.log(`${snap.longProfitTraders}/${snap.longTraders} longs in profit`);
+const sym = 'BTCUSDT';
+const [sm, tt, oi] = await Promise.all([
+  getSmartMoneyOverview(sym),         // 17 whale fields
+  getTopTraderSnapshot(sym, '5m'),    // top-account/position LSR + Taker BSR
+  getOpenInterest(sym),               // total market OI + 5m/15m/1h/4h velocity
+]);
+
+if (sm && oi) {
+  console.log(`${sm.longWhales} long whales @ avg ${sm.longWhalesAvgEntryPrice}`);
+  console.log(`${sm.longProfitTraders}/${sm.longTraders} longs in profit`);
+  console.log(`Total OI: $${(oi.oiNowUsd / 1e6).toFixed(2)}M, 4h chg ${oi.oiChg4h.toFixed(2)}%`);
+  console.log(`Smart Money share of total OI: ${(sm.totalPositions / oi.oiNowUsd * 100).toFixed(1)}%`);
 }
 ```
 
@@ -199,6 +214,13 @@ module.exports = {
       script: 'node_modules/.bin/tsx',
       args: 'src/scripts/top-trader-tick.ts 5m',
       cron_restart: '*/30 * * * *',
+      autorestart: false,
+    },
+    {
+      name: 'oi-tick',
+      script: 'node_modules/.bin/tsx',
+      args: 'src/scripts/oi-tick.ts',
+      cron_restart: '15,45 * * * *',    // offset from top-trader
       autorestart: false,
     },
     {

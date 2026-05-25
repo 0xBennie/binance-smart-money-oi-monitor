@@ -27,6 +27,9 @@ interface SnapRow {
   short_whales: number; short_whales_qty: number; short_whales_avg_entry_price: number;
   long_profit_traders: number; short_profit_traders: number;
   long_profit_whales: number; short_profit_whales: number;
+  // Joined from ob_oi_snapshots (may be null if no OI snapshot yet)
+  oi_now_usd: number | null; oi_chg_5m: number | null;
+  oi_chg_15m: number | null; oi_chg_1h: number | null; oi_chg_4h: number | null;
 }
 
 interface EnrichedRow extends SnapRow {
@@ -37,18 +40,34 @@ interface EnrichedRow extends SnapRow {
   profitDiff: number;
   whaleProfitDiff: number;
   whalePriceSpread: number;
+  // Smart Money's share of total market OI (0..1). Null if OI missing.
+  // Estimated as (totalPositions in USD) / oi_now_usd. binance returns
+  // totalPositions in base coin units for some symbols and USD for others; this
+  // is approximate but useful as a relative-magnitude indicator.
+  smRatio: number | null;
 }
 
 function getLatestSnapshots(): EnrichedRow[] {
   const db = storage.getDbReadonly();
   try {
+    // Latest smart-money row per symbol, LEFT-joined with latest OI row per symbol
     const rows = db.prepare(`
-      SELECT s.* FROM ob_smart_money_snapshots s
+      SELECT s.*,
+        o.oi_now_usd, o.oi_chg_5m, o.oi_chg_15m, o.oi_chg_1h, o.oi_chg_4h
+      FROM ob_smart_money_snapshots s
       INNER JOIN (
         SELECT symbol, MAX(ts) AS max_ts
         FROM ob_smart_money_snapshots
         GROUP BY symbol
       ) latest ON s.symbol = latest.symbol AND s.ts = latest.max_ts
+      LEFT JOIN (
+        SELECT o2.* FROM ob_oi_snapshots o2
+        INNER JOIN (
+          SELECT symbol, MAX(ts) AS max_ts
+          FROM ob_oi_snapshots
+          GROUP BY symbol
+        ) lo ON o2.symbol = lo.symbol AND o2.ts = lo.max_ts
+      ) o ON s.symbol = o.symbol
       ORDER BY s.symbol
     `).all() as SnapRow[];
 
@@ -60,6 +79,9 @@ function getLatestSnapshots(): EnrichedRow[] {
       const spread = r.long_whales_avg_entry_price
         ? (r.short_whales_avg_entry_price - r.long_whales_avg_entry_price) / r.long_whales_avg_entry_price
         : 0;
+      const smRatio = r.oi_now_usd && r.oi_now_usd > 0
+        ? r.total_positions / r.oi_now_usd
+        : null;
       return {
         ...r,
         longProfitPct: lp,
@@ -69,6 +91,7 @@ function getLatestSnapshots(): EnrichedRow[] {
         profitDiff: Math.abs(sp - lp),
         whaleProfitDiff: Math.abs(swp - lwp),
         whalePriceSpread: spread,
+        smRatio,
       };
     });
   } finally {
@@ -92,6 +115,24 @@ function getSymbolHistory(symbol: string, days = 30): SnapRow[] {
 const fmtPct = (v: number, digits = 0) => (v * 100).toFixed(digits) + '%';
 const fmtNum = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 4 });
 const fmtTs  = (ts: number) => new Date(ts).toISOString().slice(0, 19).replace('T', ' ');
+const fmtOiUsd = (v: number | null): string => {
+  if (v == null) return '—';
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
+  return `$${v.toFixed(0)}`;
+};
+const fmtChg = (v: number | null): string => {
+  if (v == null) return '—';
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(1)}%`;
+};
+const chgClass = (v: number | null): string => {
+  if (v == null) return '';
+  if (v > 1) return 'class="g"';
+  if (v < -1) return 'class="r"';
+  return '';
+};
 
 function renderHtml(rows: EnrichedRow[], sort: string): string {
   const sorters: Record<string, (a: EnrichedRow, b: EnrichedRow) => number> = {
@@ -101,6 +142,9 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
     priceSpread:  (a, b) => Math.abs(b.whalePriceSpread) - Math.abs(a.whalePriceSpread),
     longShort:    (a, b) => Math.abs(b.long_short_ratio - 1) - Math.abs(a.long_short_ratio - 1),
     whales:       (a, b) => (b.long_whales + b.short_whales) - (a.long_whales + a.short_whales),
+    oi:           (a, b) => (b.oi_now_usd ?? 0) - (a.oi_now_usd ?? 0),
+    oiChg1h:      (a, b) => Math.abs(b.oi_chg_1h ?? 0) - Math.abs(a.oi_chg_1h ?? 0),
+    oiChg4h:      (a, b) => Math.abs(b.oi_chg_4h ?? 0) - Math.abs(a.oi_chg_4h ?? 0),
   };
   const sortFn = sorters[sort] || sorters.profitDiff;
   const sorted = [...rows].sort(sortFn);
@@ -124,6 +168,9 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
         <td>${fmtNum(r.long_whales_avg_entry_price)}</td>
         <td>${fmtNum(r.short_whales_avg_entry_price)}</td>
         <td style="${spreadStyle}">${fmtPct(r.whalePriceSpread, 1)}</td>
+        <td>${fmtOiUsd(r.oi_now_usd)}</td>
+        <td ${chgClass(r.oi_chg_1h)}>${fmtChg(r.oi_chg_1h)}</td>
+        <td ${chgClass(r.oi_chg_4h)}>${fmtChg(r.oi_chg_4h)}</td>
         <td>${verdict}</td>
         <td class="ts">${fmtTs(r.ts)}</td>
       </tr>`;
@@ -166,6 +213,9 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
     ${sortLink('priceSpread', 'Whale Avg Spread')}
     ${sortLink('longShort', 'LSR Extreme')}
     ${sortLink('whales', 'Whale Count')}
+    ${sortLink('oi', 'OI (USD)')}
+    ${sortLink('oiChg1h', 'OI Δ 1h')}
+    ${sortLink('oiChg4h', 'OI Δ 4h')}
     ${sortLink('symbol', 'A-Z')}
   </div>
   <table>
@@ -180,6 +230,9 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
       <th>Long Whale Avg</th>
       <th>Short Whale Avg</th>
       <th>Spread</th>
+      <th>OI</th>
+      <th>OI Δ1h</th>
+      <th>OI Δ4h</th>
       <th>Verdict</th>
       <th>Updated</th>
     </tr></thead>

@@ -24,6 +24,12 @@ export interface TopTraderSnapshotRow {
   takerBuyVol: number; takerSellVol: number; takerBsr: number;
 }
 
+export interface OISnapshotRow {
+  symbol: string; ts: number;
+  oiNowUsd: number; oiNowCoins: number;
+  oiChg5m: number; oiChg15m: number; oiChg1h: number; oiChg4h: number;
+}
+
 const RETENTION_DAYS = 30;
 const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'snapshots.db');
 
@@ -31,6 +37,7 @@ class Storage {
   private db: Database.Database | null = null;
   private stmtInsertSmartMoney!: Database.Statement;
   private stmtInsertTopTrader!: Database.Statement;
+  private stmtInsertOI!: Database.Statement;
 
   init(dbPath = DEFAULT_DB_PATH): void {
     if (this.db) return;
@@ -67,6 +74,14 @@ class Storage {
         PRIMARY KEY (symbol, ts, period)
       );
       CREATE INDEX IF NOT EXISTS idx_tt_ts ON ob_top_trader_snapshots(ts);
+
+      CREATE TABLE IF NOT EXISTS ob_oi_snapshots (
+        symbol TEXT NOT NULL, ts INTEGER NOT NULL,
+        oi_now_usd REAL, oi_now_coins REAL,
+        oi_chg_5m REAL, oi_chg_15m REAL, oi_chg_1h REAL, oi_chg_4h REAL,
+        PRIMARY KEY (symbol, ts)
+      );
+      CREATE INDEX IF NOT EXISTS idx_oi_ts ON ob_oi_snapshots(ts);
     `);
   }
 
@@ -89,6 +104,12 @@ class Storage {
          top_position_long_pct, top_position_short_pct, top_position_lsr,
          taker_buy_vol, taker_sell_vol, taker_bsr)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.stmtInsertOI = this.db!.prepare(`
+      INSERT OR REPLACE INTO ob_oi_snapshots
+        (symbol, ts, oi_now_usd, oi_now_coins,
+         oi_chg_5m, oi_chg_15m, oi_chg_1h, oi_chg_4h)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
   }
 
@@ -116,12 +137,21 @@ class Storage {
     ]);
   }
 
-  cleanup(): { smartMoney: number; topTrader: number } {
-    if (!this.db) return { smartMoney: 0, topTrader: 0 };
+  recordOI(row: OISnapshotRow): void {
+    if (!this.db) return;
+    this.stmtInsertOI.run([
+      row.symbol, row.ts, row.oiNowUsd, row.oiNowCoins,
+      row.oiChg5m, row.oiChg15m, row.oiChg1h, row.oiChg4h,
+    ]);
+  }
+
+  cleanup(): { smartMoney: number; topTrader: number; oi: number } {
+    if (!this.db) return { smartMoney: 0, topTrader: 0, oi: 0 };
     const expiry = Date.now() - RETENTION_DAYS * 86400_000;
     const sm = this.db.prepare('DELETE FROM ob_smart_money_snapshots WHERE ts < ?').run(expiry);
     const tt = this.db.prepare('DELETE FROM ob_top_trader_snapshots WHERE ts < ?').run(expiry);
-    return { smartMoney: sm.changes, topTrader: tt.changes };
+    const oi = this.db.prepare('DELETE FROM ob_oi_snapshots WHERE ts < ?').run(expiry);
+    return { smartMoney: sm.changes, topTrader: tt.changes, oi: oi.changes };
   }
 
   /** Read-only handle for dashboards / queries. */
