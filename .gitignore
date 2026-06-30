@@ -8,3 +8,12 @@ data/*.db-*
 logs/
 .vscode/
 .idea/
+
+# Python (altmonitor)
+__pycache__/
+*.pyc
+.venv/
+altmonitor/.env
+altmonitor/state.json
+altmonitor/alerts.db
+altmonitor/alerts.db-*

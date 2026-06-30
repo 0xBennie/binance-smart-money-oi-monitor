@@ -1,9 +1,23 @@
 # binance-smart-money-tracker
 
+**English** · [简体中文](README.zh-CN.md)
+
 Production-grade scraper for **Binance Smart Signal** (the "Smart Money" tab on
 binance.com Futures) — pulls the full 17-field whale overview that the public
 `fapi` API does **not** expose, with a 7-layer defense against `418 / 429 / 403`
 rate-limit bans.
+
+This repo ships **two independent tools** plus **three ways to consume** the data:
+
+| Tool | Stack | What it does |
+|---|---|---|
+| **Smart Money tracker** (root `src/`) | TypeScript | Snapshots the 17-field whale overview + top-trader + OI to SQLite, serves an Express dashboard |
+| **[altmonitor](altmonitor/)** (`altmonitor/`) | Python | Full-market 1-minute price-move (±3%) + OI anomaly monitor with a Telegram bot |
+
+**Consume the Smart Money data three ways** — as a [Node library](#as-a-library),
+over the [HTTP JSON API](#http-json-api), or through the bundled
+[**MCP server**](#mcp-server-use-from-any-terminal-ai) that exposes it as tools to
+any terminal AI (Claude Code, Codex, Gemini CLI, Cursor, …).
 
 This is the URL that `binance.com/zh-CN/smart-money/signal/<symbol>` calls
 behind the scenes:
@@ -184,6 +198,84 @@ The library re-exports all rate-limit helpers
 so you can integrate the same circuit breaker into your other Binance calls
 and share one weight budget across modules.
 
+Install straight from GitHub:
+
+```bash
+npm install github:0xBennie/binance-smart-money-tracker
+```
+
+### HTTP JSON API
+
+The dashboard process doubles as a read-only JSON API over whatever is in the
+sqlite db — any HTTP client (including an AI agent that can `fetch`) can pull it:
+
+```bash
+npm run dashboard          # PORT=3001 by default
+```
+
+| Route | Returns |
+|---|---|
+| `GET /api/snapshots` | Latest snapshot per symbol (smart-money joined with OI), enriched with profit % and SM-share-of-OI |
+| `GET /api/symbol/:symbol/history?days=30` | One symbol's snapshot history |
+| `GET /health` | `{ ok: true, port }` liveness probe |
+| `GET /` | Human-facing HTML dashboard (sortable table) |
+| `GET /symbol/:symbol` | Single-symbol 30-day HTML view |
+
+```bash
+curl -s localhost:3001/api/snapshots | jq '.[0]'
+```
+
+> The API serves what the cron has written to `data/snapshots.db`. Run the
+> tracker (`npm run smart-money:tick`) at least once first, or the responses are empty.
+
+### MCP server (use from any terminal AI)
+
+The bundled MCP server exposes the **live** Smart Money / Top Trader / OI library
+(with the built-in rate-limit protection) as Model Context Protocol tools — no
+cron or local database needed. It works with any MCP-compatible client:
+**Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, Windsurf, Cline, Zed, Continue**, …
+
+```bash
+npm run mcp                # stdio JSON-RPC server
+```
+
+Register it in Claude Code (project `.mcp.json` or `~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "binance-smart-money": {
+      "command": "npx",
+      "args": ["tsx", "src/scripts/mcp-server.ts"],
+      "cwd": "/absolute/path/to/binance-smart-money-tracker"
+    }
+  }
+}
+```
+
+After `npm run build` you can also use the installed binary `binance-smart-money-mcp`.
+
+**Tools exposed:**
+
+| Tool | Args | Returns |
+|---|---|---|
+| `get_smart_money` | `symbol` | 17-field whale overview: L/S whale counts, avg entry prices, in-profit counts, USD notional |
+| `get_top_trader` | `symbol`, `period?` | Top-trader (top 20% margin) LSR + Taker buy/sell ratio |
+| `get_open_interest` | `symbol` | Total OI (USD + coins) + 5m/15m/1h/4h velocity |
+| `get_full_picture` | `symbol`, `period?` | All three combined + Smart Money's share of total OI — the one-shot "what's the positioning on X" call |
+
+Example `get_full_picture ETH` result:
+
+```json
+{
+  "symbol": "ETHUSDT",
+  "smartMoney": { "longShortRatio": 0.288, "shortProfitPct": 72, "notionalUsd": 1860314867 },
+  "topTrader": { "topPositionLsr": 1.50, "takerBuySellRatio": 1.16 },
+  "openInterest": { "oiNowUsd": 3610164191, "oiChg4h": 0.55 },
+  "smartMoneyShareOfOI": 0.515
+}
+```
+
 ---
 
 ## Pool sizing & cron cadence
@@ -314,6 +406,33 @@ but each one ping-tests via `preflightBinanceFapi()` before issuing any
 data requests — so if process A just got a 418, process B's preflight will
 catch it and abort cleanly. Stagger the times anyway to give the IP weight
 window time to drain between bursts.
+
+---
+
+## Companion: altmonitor (1-minute price + OI anomaly monitor)
+
+[`altmonitor/`](altmonitor/) is a self-contained **Python** tool (separate from the
+TypeScript tracker above) that watches **every** USDT-perpetual contract and fires a
+Telegram alert when a symbol moves **±3% within a single 1-minute candle**, annotated
+with the same-minute OI direction (price × OI quadrant), amplitude, and long/short ratio.
+
+- Single WebSocket subscription to the full-market `@kline_1m` stream for price
+- Background `fapi/v1/openInterest` sweep every 60 s for the OI delta
+- Telegram commands (`/set_pump`, `/watch`, `/history`, `/stats`, …) to retune live
+  without a restart; config persists to `state.json`
+- Optional SQLite alert history for `/history` and `/stats` review
+- Free public endpoints only — no API key, no quota burn
+
+```bash
+cd altmonitor
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # fill TG_BOT_TOKEN + TG_CHAT_ID
+python monitor.py
+```
+
+Full configuration, Telegram command reference, and the systemd unit are in
+[`altmonitor/README.md`](altmonitor/README.md).
 
 ---
 

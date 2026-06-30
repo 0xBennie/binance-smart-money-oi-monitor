@@ -1,0 +1,7 @@
+.venv/
+.env
+state.json
+alerts.db
+alerts.db-*
+__pycache__/
+*.pyc
