@@ -16,7 +16,7 @@ import {
   detectBinanceBlockDetails,
   updateBinanceUsedWeight,
   waitForBinanceWeightHeadroom,
-} from './binance-rate-limit';
+} from './binance-rate-limit.js';
 
 const SMART_MONEY_URL =
   'https://www.binance.com/bapi/futures/v1/public/future/smart-money/signal/overview';

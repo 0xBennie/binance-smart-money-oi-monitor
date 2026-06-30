@@ -29,14 +29,16 @@
  */
 import 'dotenv/config';
 import readline from 'node:readline';
+// Import the client modules directly (not the package barrel) so running the
+// MCP server never loads storage/dashboard code — i.e. no better-sqlite3 (native)
+// or express at runtime. The server only needs the live Binance fetchers.
 import {
   getSmartMoneyOverview,
   smartMoneyNotionalUsd,
   smartMoneyShareOfOI,
-  getTopTraderSnapshot,
-  getOpenInterest,
-  type TopTraderPeriod,
-} from '../index';
+} from '../binance-smart-money.js';
+import { getTopTraderSnapshot, type TopTraderPeriod } from '../binance-top-trader.js';
+import { getOpenInterest } from '../binance-open-interest.js';
 
 const SERVER_INFO = { name: 'binance-smart-money', version: '1.0.0' };
 const PROTOCOL_VERSION = '2025-06-18';

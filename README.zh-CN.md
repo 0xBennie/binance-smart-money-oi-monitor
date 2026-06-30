@@ -189,11 +189,32 @@ npm run dashboard          # 默认 PORT=3001
 Model Context Protocol 工具 —— 无需 cron、无需本地数据库。兼容任意 MCP 客户端：
 **Claude Code、Claude Desktop、Codex CLI、Gemini CLI、Cursor、Windsurf、Cline、Zed、Continue** ……
 
-```bash
-npm run mcp                # stdio JSON-RPC server
+**一行注册到你自己的 AI —— 不用 clone、不用 build。** 发布到 npm 后，让客户端指向
+`npx -y binance-smart-money-tracker` 即可：
+
+```json
+{
+  "mcpServers": {
+    "binance-smart-money": {
+      "command": "npx",
+      "args": ["-y", "binance-smart-money-tracker"]
+    }
+  }
+}
 ```
 
-在 Claude Code 注册（项目 `.mcp.json` 或 `~/.claude.json`）：
+或在 Claude Code 命令行里加：
+
+```bash
+claude mcp add binance-smart-money -- npx -y binance-smart-money-tracker
+```
+
+`npx` 会自动下载包、运行 `binance-smart-money-tracker` 这个 bin（即 MCP server），
+你的 AI 就拿到下面 4 个工具。该 server 是纯 stdio JSON-RPC，运行时**不加载任何原生模块**
+（不拉 `better-sqlite3`/`express`）。
+
+<details>
+<summary>从 clone 直接跑（无需发布 npm）</summary>
 
 ```json
 {
@@ -207,7 +228,8 @@ npm run mcp                # stdio JSON-RPC server
 }
 ```
 
-`npm run build` 后也可用安装的命令 `binance-smart-money-mcp`。
+或直接 `npm run mcp` 在前台启动 stdio server。
+</details>
 
 **暴露的工具：**
 

@@ -235,11 +235,32 @@ The bundled MCP server exposes the **live** Smart Money / Top Trader / OI librar
 cron or local database needed. It works with any MCP-compatible client:
 **Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, Windsurf, Cline, Zed, Continue**, …
 
-```bash
-npm run mcp                # stdio JSON-RPC server
+**Register it with one line — no clone, no build.** Once published to npm, point
+your AI client at `npx -y binance-smart-money-tracker`:
+
+```json
+{
+  "mcpServers": {
+    "binance-smart-money": {
+      "command": "npx",
+      "args": ["-y", "binance-smart-money-tracker"]
+    }
+  }
+}
 ```
 
-Register it in Claude Code (project `.mcp.json` or `~/.claude.json`):
+Or add it to Claude Code from the shell:
+
+```bash
+claude mcp add binance-smart-money -- npx -y binance-smart-money-tracker
+```
+
+`npx` downloads the package, runs the `binance-smart-money-tracker` bin (the MCP
+server), and your AI gets the four tools below. The server is pure stdio JSON-RPC
+and pulls in no native modules (no `better-sqlite3`/`express` at runtime).
+
+<details>
+<summary>Running from a clone instead (no npm publish needed)</summary>
 
 ```json
 {
@@ -253,7 +274,8 @@ Register it in Claude Code (project `.mcp.json` or `~/.claude.json`):
 }
 ```
 
-After `npm run build` you can also use the installed binary `binance-smart-money-mcp`.
+or just `npm run mcp` to launch the stdio server in the foreground.
+</details>
 
 **Tools exposed:**
 

@@ -7,20 +7,20 @@ export {
   smartMoneyNotionalUsd,
   smartMoneyShareOfOI,
   type SmartMoneyOverview,
-} from './binance-smart-money';
+} from './binance-smart-money.js';
 
 export {
   getTopTraderSnapshot,
   getTopTraderSnapshotsBatch,
   type TopTraderSnapshot,
   type TopTraderPeriod,
-} from './binance-top-trader';
+} from './binance-top-trader.js';
 
 export {
   getOpenInterest,
   getOpenInterestBatch,
   type OpenInterestSnapshot,
-} from './binance-open-interest';
+} from './binance-open-interest.js';
 
 export {
   getTicker24h,
@@ -28,13 +28,13 @@ export {
   fundingCountdownString,
   type TickerInfo,
   type FundingInfo,
-} from './binance-ticker';
+} from './binance-ticker.js';
 
 export {
   formatSmartMoneyPush,
   formatSmartMoneyPushPlain,
   type FormatterInput,
-} from './format';
+} from './format.js';
 
 export {
   isBinanceApiBlocked,
@@ -47,7 +47,7 @@ export {
   getBinanceWeightUtilization,
   waitForBinanceWeightHeadroom,
   preflightBinanceFapi,
-} from './binance-rate-limit';
+} from './binance-rate-limit.js';
 
-export { storage } from './storage';
-export type { SmartMoneySnapshotRow, TopTraderSnapshotRow, OISnapshotRow } from './storage';
+export { storage } from './storage.js';
+export type { SmartMoneySnapshotRow, TopTraderSnapshotRow, OISnapshotRow } from './storage.js';

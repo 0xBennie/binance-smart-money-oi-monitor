@@ -26,10 +26,10 @@
  */
 import 'dotenv/config';
 import axios from 'axios';
-import { storage } from '../storage';
-import { getSmartMoneyOverviewBatch } from '../binance-smart-money';
-import { preflightBinanceFapi } from '../binance-rate-limit';
-import { installGracefulShutdown } from '../cron-utils';
+import { storage } from '../storage.js';
+import { getSmartMoneyOverviewBatch } from '../binance-smart-money.js';
+import { preflightBinanceFapi } from '../binance-rate-limit.js';
+import { installGracefulShutdown } from '../cron-utils.js';
 
 const POOL_MAX    = parseInt(process.env.SMART_MONEY_POOL_MAX    || '0', 10); // 0 = unlimited
 const SHARD_INDEX = parseInt(process.env.SMART_MONEY_SHARD_INDEX || '0', 10);

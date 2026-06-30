@@ -13,8 +13,8 @@
  */
 import 'dotenv/config';
 import express from 'express';
-import { storage } from '../storage';
-import { smartMoneyNotionalUsd } from '../binance-smart-money';
+import { storage } from '../storage.js';
+import { smartMoneyNotionalUsd } from '../binance-smart-money.js';
 
 const PORT = parseInt(process.env.SMART_MONEY_DASHBOARD_PORT || process.env.PORT || '3001', 10);
 

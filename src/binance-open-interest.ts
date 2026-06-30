@@ -17,7 +17,7 @@ import {
   detectBinanceBlockDetails,
   updateBinanceUsedWeight,
   waitForBinanceWeightHeadroom,
-} from './binance-rate-limit';
+} from './binance-rate-limit.js';
 
 const OI_HIST_URL = 'https://fapi.binance.com/futures/data/openInterestHist';
 const CACHE_TTL_MS = 5 * 60_000;

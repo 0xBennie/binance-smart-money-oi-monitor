@@ -2,7 +2,7 @@
 // oi-tick / push-demo). Keeps the per-script boilerplate small so it's hard
 // for one script to forget graceful shutdown or storage cleanup.
 
-import { storage } from './storage';
+import { storage } from './storage.js';
 
 /**
  * Wire up SIGTERM / SIGINT so the process closes the DB cleanly when

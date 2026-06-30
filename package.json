@@ -5,6 +5,26 @@
   "license": "MIT",
   "author": "0xBennie",
   "type": "module",
+  "keywords": [
+    "binance",
+    "smart-money",
+    "smart-signal",
+    "whale",
+    "open-interest",
+    "long-short-ratio",
+    "crypto",
+    "mcp",
+    "model-context-protocol",
+    "trading"
+  ],
+  "homepage": "https://github.com/0xBennie/binance-smart-money-tracker#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xBennie/binance-smart-money-tracker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0xBennie/binance-smart-money-tracker/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -14,6 +34,7 @@
     }
   },
   "bin": {
+    "binance-smart-money-tracker": "dist/scripts/mcp-server.js",
     "binance-smart-money-mcp": "dist/scripts/mcp-server.js"
   },
   "files": [
@@ -39,8 +60,10 @@
   },
   "dependencies": {
     "axios": "^1.7.0",
+    "dotenv": "^16.4.0"
+  },
+  "optionalDependencies": {
     "better-sqlite3": "^12.0.0",
-    "dotenv": "^16.4.0",
     "express": "^4.19.0"
   },
   "devDependencies": {
