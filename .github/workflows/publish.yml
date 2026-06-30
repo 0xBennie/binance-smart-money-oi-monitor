@@ -1,0 +1,27 @@
+name: Publish to npm
+
+# Publishes the package to npm. Triggers:
+#   - manually from the Actions tab ("Run workflow"), or
+#   - automatically when a GitHub Release is published.
+# Requires a repo secret NPM_TOKEN (an npm granular/automation token with
+# write access — it bypasses 2FA, which is what lets CI publish).
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
