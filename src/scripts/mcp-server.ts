@@ -18,7 +18,7 @@
  *       "binance-smart-money": {
  *         "command": "npx",
  *         "args": ["tsx", "src/scripts/mcp-server.ts"],
- *         "cwd": "/absolute/path/to/binance-smart-money-tracker"
+ *         "cwd": "/absolute/path/to/binance-smart-money-oi-monitor"
  *       }
  *     }
  *   }

@@ -101,3 +101,12 @@ journalctl -u altmonitor -f          # 看日志
 - **OI**:后台每 `OI_POLL_SEC`(默认 60s)用 `fapi/v1/openInterest` 扫全市场(权重 1/币,~530 币 << 2400/min 限频),维护上一轮快照算变化;触发价格告警时读取,缺失则标 `N/A`,不阻断。**仅当相邻两轮间隔接近 `OI_POLL_SEC`(0.5–2.5×)时才给值**,否则标 `N/A`——避免慢扫/退避期把多分钟跨度误标成「1min」。
 - **去重**:同一币同一根 1m K 线只推一次 + 按币冷却(冷却计时在内存,重启后重置)。
 - **持久化**:运行配置写 `state.json`(`/set_*`、`/watch` 等重启不丢);开启 `HISTORY_ENABLED` 时每条告警入 `alerts.db`(SQLite),供 `/history`、`/stats` 复盘。
+
+---
+
+## 作者 & 联系
+
+**Bennie Strategy** 出品(本工具是 [binance-smart-money-oi-monitor](../README.md) 仓库的 Python 伴随组件)。
+
+- 🐦 X / 推特:[@0xBenniee](https://x.com/0xBenniee)
+- 💬 Telegram:[@OxBennie](https://t.me/OxBennie)

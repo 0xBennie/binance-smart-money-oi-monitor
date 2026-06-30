@@ -1,6 +1,8 @@
-# binance-smart-money-tracker
+# Binance Smart Money & OI Monitor
 
 **English** · [简体中文](README.zh-CN.md)
+
+> A **[Bennie Strategy](https://x.com/0xBenniee)** project · npm package `binance-smart-money-oi-monitor` · contact: [X/Twitter @0xBenniee](https://x.com/0xBenniee) · [Telegram @OxBennie](https://t.me/OxBennie)
 
 Production-grade scraper for **Binance Smart Signal** (the "Smart Money" tab on
 binance.com Futures) — pulls the full 17-field whale overview that the public
@@ -91,7 +93,7 @@ shorts entered too late and are about to get squeezed.
 - **One sqlite file**, two tables, 30-day retention
 - **One Express dashboard** with server-side rendering (no JS framework)
 - **Two cron entry points** (smart-money 60min, top-trader 30min) — staggered
-- **Library mode**: `import { getSmartMoneyOverview } from 'binance-smart-money-tracker'`
+- **Library mode**: `import { getSmartMoneyOverview } from 'binance-smart-money-oi-monitor'`
 
 ---
 
@@ -128,8 +130,8 @@ multi-hour hard block is to retry-loop a 418 — don't.
 ## Quick start
 
 ```bash
-git clone https://github.com/0xBennie/binance-smart-money-tracker.git
-cd binance-smart-money-tracker
+git clone https://github.com/0xBennie/binance-smart-money-oi-monitor.git
+cd binance-smart-money-oi-monitor
 npm install
 
 # 1. One-shot pull (writes to data/snapshots.db)
@@ -163,7 +165,7 @@ import {
   getOpenInterest,
   smartMoneyNotionalUsd,
   smartMoneyShareOfOI,
-} from 'binance-smart-money-tracker';
+} from 'binance-smart-money-oi-monitor';
 
 const sym = 'BTCUSDT';
 const [sm, tt, oi] = await Promise.all([
@@ -201,7 +203,7 @@ and share one weight budget across modules.
 Install straight from GitHub:
 
 ```bash
-npm install github:0xBennie/binance-smart-money-tracker
+npm install github:0xBennie/binance-smart-money-oi-monitor
 ```
 
 ### HTTP JSON API
@@ -236,14 +238,14 @@ cron or local database needed. It works with any MCP-compatible client:
 **Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, Windsurf, Cline, Zed, Continue**, …
 
 **Register it with one line — no clone, no build.** Once published to npm, point
-your AI client at `npx -y binance-smart-money-tracker`:
+your AI client at `npx -y binance-smart-money-oi-monitor`:
 
 ```json
 {
   "mcpServers": {
     "binance-smart-money": {
       "command": "npx",
-      "args": ["-y", "binance-smart-money-tracker"]
+      "args": ["-y", "binance-smart-money-oi-monitor"]
     }
   }
 }
@@ -252,10 +254,10 @@ your AI client at `npx -y binance-smart-money-tracker`:
 Or add it to Claude Code from the shell:
 
 ```bash
-claude mcp add binance-smart-money -- npx -y binance-smart-money-tracker
+claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 ```
 
-`npx` downloads the package, runs the `binance-smart-money-tracker` bin (the MCP
+`npx` downloads the package, runs the `binance-smart-money-oi-monitor` bin (the MCP
 server), and your AI gets the four tools below. The server is pure stdio JSON-RPC
 and pulls in no native modules (no `better-sqlite3`/`express` at runtime).
 
@@ -268,7 +270,7 @@ and pulls in no native modules (no `better-sqlite3`/`express` at runtime).
     "binance-smart-money": {
       "command": "npx",
       "args": ["tsx", "src/scripts/mcp-server.ts"],
-      "cwd": "/absolute/path/to/binance-smart-money-tracker"
+      "cwd": "/absolute/path/to/binance-smart-money-oi-monitor"
     }
   }
 }
@@ -466,6 +468,17 @@ Full configuration, Telegram command reference, and the systemd unit are in
   to never get there.
 - ❌ No on-chain data, no order book, no aggregated trades. For that, see
   the projects in *Credits*.
+
+---
+
+## Author & contact
+
+Built and maintained by **Bennie Strategy**.
+
+- 🐦 X / Twitter: [@0xBenniee](https://x.com/0xBenniee)
+- 💬 Telegram: [@OxBennie](https://t.me/OxBennie)
+
+Questions, ideas, or want a feature? Reach out on either — issues and PRs welcome too.
 
 ---
 

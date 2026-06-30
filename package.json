@@ -1,9 +1,10 @@
 {
-  "name": "binance-smart-money-tracker",
+  "name": "binance-smart-money-oi-monitor",
   "version": "1.0.0",
-  "description": "Production-grade Binance Smart Signal (Smart Money) tracker — 17 whale fields, 7-layer 418 protection, sqlite + express dashboard.",
+  "description": "Binance Smart Money (Smart Signal) + Open Interest anomaly monitor — 17 whale fields the public fapi can't give you, an MCP server for any terminal AI, 7-layer 418 protection. A Bennie Strategy project.",
   "license": "MIT",
-  "author": "0xBennie",
+  "author": "Bennie Strategy (0xBenniee) <https://x.com/0xBenniee>",
+  "funding": "https://x.com/0xBenniee",
   "type": "module",
   "keywords": [
     "binance",
@@ -17,13 +18,13 @@
     "model-context-protocol",
     "trading"
   ],
-  "homepage": "https://github.com/0xBennie/binance-smart-money-tracker#readme",
+  "homepage": "https://github.com/0xBennie/binance-smart-money-oi-monitor#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/0xBennie/binance-smart-money-tracker.git"
+    "url": "git+https://github.com/0xBennie/binance-smart-money-oi-monitor.git"
   },
   "bugs": {
-    "url": "https://github.com/0xBennie/binance-smart-money-tracker/issues"
+    "url": "https://github.com/0xBennie/binance-smart-money-oi-monitor/issues"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,8 +35,8 @@
     }
   },
   "bin": {
-    "binance-smart-money-tracker": "dist/scripts/mcp-server.js",
-    "binance-smart-money-mcp": "dist/scripts/mcp-server.js"
+    "binance-smart-money-oi-monitor": "dist/scripts/mcp-server.js",
+    "binance-smart-money-oi-monitor-mcp": "dist/scripts/mcp-server.js"
   },
   "files": [
     "dist",
