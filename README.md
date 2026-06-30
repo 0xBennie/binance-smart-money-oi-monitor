@@ -1,5 +1,11 @@
 # Binance Smart Money & OI Monitor
 
+[![npm version](https://img.shields.io/npm/v/binance-smart-money-oi-monitor)](https://www.npmjs.com/package/binance-smart-money-oi-monitor)
+[![npm downloads](https://img.shields.io/npm/dm/binance-smart-money-oi-monitor)](https://www.npmjs.com/package/binance-smart-money-oi-monitor)
+[![CI](https://github.com/0xBennie/binance-smart-money-oi-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/0xBennie/binance-smart-money-oi-monitor/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/binance-smart-money-oi-monitor)](LICENSE)
+[![node](https://img.shields.io/node/v/binance-smart-money-oi-monitor)](package.json)
+
 **English** · [简体中文](README.zh-CN.md)
 
 > A **[Bennie Strategy](https://x.com/0xBenniee)** project · npm package `binance-smart-money-oi-monitor` · contact: [X/Twitter @0xBenniee](https://x.com/0xBenniee) · [Telegram @OxBennie](https://t.me/OxBennie)
@@ -433,19 +439,31 @@ window time to drain between bursts.
 
 ---
 
-## Companion: altmonitor (1-minute price + OI anomaly monitor)
+## Companion: altmonitor (price / OI / volume anomaly monitor)
 
 [`altmonitor/`](altmonitor/) is a self-contained **Python** tool (separate from the
-TypeScript tracker above) that watches **every** USDT-perpetual contract and fires a
-Telegram alert when a symbol moves **±3% within a single 1-minute candle**, annotated
-with the same-minute OI direction (price × OI quadrant), amplitude, and long/short ratio.
+TypeScript tracker above) that watches **every** USDT-perpetual contract and fires
+Telegram alerts in three flavors:
 
-- Single WebSocket subscription to the full-market `@kline_1m` stream for price
-- Background `fapi/v1/openInterest` sweep every 60 s for the OI delta
-- Telegram commands (`/set_pump`, `/watch`, `/history`, `/stats`, …) to retune live
+1. **Price move** — ±3% within a single 1-minute candle, annotated with the same-minute OI direction (price × OI quadrant), amplitude, and long/short ratio.
+2. **OI surge** — open interest jumps past a threshold over a **1-minute** or **5-minute** window.
+3. **Volume burst (爆量)** — a closed 1m candle's quote volume spikes to ≥ N× its own trailing median.
+
+- Single WebSocket subscription to the full-market `@kline_1m` stream (price + volume)
+- Background `fapi/v1/openInterest` sweep every 60 s, kept in a timestamped ring buffer for 1m/5m deltas
+- Telegram commands (`/set_pump`, `/set_oi`, `/set_vol`, `/watch`, `/history`, `/stats`, …) to retune live
   without a restart; config persists to `state.json`
-- Optional SQLite alert history for `/history` and `/stats` review
+- Optional SQLite alert history (all three alert types) for `/history` and `/stats` review
 - Free public endpoints only — no API key, no quota burn
+
+One-command deploy with Docker (from the repo root):
+
+```bash
+cp altmonitor/.env.example altmonitor/.env   # fill TG_BOT_TOKEN + TG_CHAT_ID
+docker compose up -d                          # build + run, auto-restart
+```
+
+Or run it directly:
 
 ```bash
 cd altmonitor
@@ -455,8 +473,8 @@ cp .env.example .env          # fill TG_BOT_TOKEN + TG_CHAT_ID
 python monitor.py
 ```
 
-Full configuration, Telegram command reference, and the systemd unit are in
-[`altmonitor/README.md`](altmonitor/README.md).
+Full configuration, Telegram command reference, the Docker compose file, and the
+systemd unit are in [`altmonitor/README.md`](altmonitor/README.md).
 
 ---
 

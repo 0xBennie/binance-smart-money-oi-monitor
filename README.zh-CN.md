@@ -1,5 +1,11 @@
 # Binance 合约聪明钱 & OI 异动监控
 
+[![npm version](https://img.shields.io/npm/v/binance-smart-money-oi-monitor)](https://www.npmjs.com/package/binance-smart-money-oi-monitor)
+[![npm downloads](https://img.shields.io/npm/dm/binance-smart-money-oi-monitor)](https://www.npmjs.com/package/binance-smart-money-oi-monitor)
+[![CI](https://github.com/0xBennie/binance-smart-money-oi-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/0xBennie/binance-smart-money-oi-monitor/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/binance-smart-money-oi-monitor)](LICENSE)
+[![node](https://img.shields.io/node/v/binance-smart-money-oi-monitor)](package.json)
+
 [English](README.md) · **简体中文**
 
 > **[Bennie Strategy](https://x.com/0xBenniee)** 出品 · npm 包名 `binance-smart-money-oi-monitor` · 联系：[X/推特 @0xBenniee](https://x.com/0xBenniee) · [Telegram @OxBennie](https://t.me/OxBennie)
@@ -306,17 +312,29 @@ module.exports = {
 
 ---
 
-## 伴随工具：altmonitor（1 分钟价格 + OI 异动监控）
+## 伴随工具：altmonitor（价格 / OI / 爆量 异动监控）
 
 [`altmonitor/`](altmonitor/) 是一个自包含的 **Python** 工具（与上面的 TypeScript 抓取器相互独立），
-监控**全部** USDT 永续合约，当某币**单根 1 分钟 K 线内涨/跌 ≥ ±3%** 时推送 Telegram 告警，
-并标注同期 OI 方向（价 × 仓四象限）、振幅、多空比。
+监控**全部** USDT 永续合约，推送三类 Telegram 告警：
 
-- 单条 WebSocket 订阅全市场 `@kline_1m` 算实时价格
-- 后台每 60s 用 `fapi/v1/openInterest` 扫全市场算 OI 变化
-- Telegram 命令（`/set_pump`、`/watch`、`/history`、`/stats` ……）实时调参，无需重启，配置持久化到 `state.json`
-- 可选 SQLite 告警历史，供 `/history`、`/stats` 复盘
+1. **价格异动** —— 单根 1 分钟 K 线涨/跌 ≥ ±3%，带价 × 仓四象限 + 振幅 + 多空比
+2. **OI 异动** —— 未平仓量在 **1 分钟** 或 **5 分钟** 窗口内骤变超阈值
+3. **爆量（成交量）** —— 收盘 1m 成交额突增到自身近 N 根中位的 ≥ N 倍
+
+- 单条 WebSocket 订阅全市场 `@kline_1m`（价格 + 成交量）
+- 后台每 60s 扫全市场 `fapi/v1/openInterest`，存进带时间戳的环形缓冲算 1m/5m 变化
+- Telegram 命令（`/set_pump`、`/set_oi`、`/set_vol`、`/watch`、`/history`、`/stats` ……）实时调参，无需重启，持久化到 `state.json`
+- 可选 SQLite 告警历史（三类都存），供 `/history`、`/stats` 复盘
 - 全部免费公开接口 —— 无需 API key，不烧额度
+
+Docker 一键部署（在仓库根目录）：
+
+```bash
+cp altmonitor/.env.example altmonitor/.env   # 填 TG_BOT_TOKEN + TG_CHAT_ID
+docker compose up -d                          # 构建 + 运行，崩溃自动重启
+```
+
+或直接运行：
 
 ```bash
 cd altmonitor
@@ -326,7 +344,7 @@ cp .env.example .env          # 填入 TG_BOT_TOKEN + TG_CHAT_ID
 python monitor.py
 ```
 
-完整配置、Telegram 命令表、systemd 配置见 [`altmonitor/README.md`](altmonitor/README.md)。
+完整配置、Telegram 命令表、Docker compose、systemd 配置见 [`altmonitor/README.md`](altmonitor/README.md)。
 
 ---
 

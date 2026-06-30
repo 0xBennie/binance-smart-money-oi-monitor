@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  typecheck:
-    name: TypeScript typecheck
+  node:
+    name: TypeScript typecheck + tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +17,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm test
 
   python:
     name: altmonitor syntax check

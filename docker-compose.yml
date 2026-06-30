@@ -1,0 +1,18 @@
+# One-command deploy for the altmonitor Telegram bot
+# (full-market price / OI / volume anomaly alerts).
+#
+#   cp altmonitor/.env.example altmonitor/.env   # fill TG_BOT_TOKEN + TG_CHAT_ID
+#   docker compose up -d                          # build + run, auto-restarts
+#   docker compose logs -f                        # watch
+#
+# state.json and alerts.db persist in the named volume across restarts.
+services:
+  altmonitor:
+    build: ./altmonitor
+    env_file: ./altmonitor/.env
+    volumes:
+      - altmonitor-data:/data
+    restart: unless-stopped
+
+volumes:
+  altmonitor-data:

@@ -12,10 +12,11 @@ from commands import CommandHandler
 from history import History
 from metrics import fetch_lsr
 from models import Alert
-from monitor import build_message, quadrant
+from monitor import build_message, build_oi_msg, build_vol_msg, quadrant
 from oi_tracker import OITracker
 from state import RuntimeSettings, normalize_symbol
 from symbols import fetch_usdt_perpetuals
+from volume import VolumeTracker
 
 
 async def main() -> None:
@@ -82,6 +83,26 @@ async def main() -> None:
 
         # 8. full message with all fields
         print("[8] sample:\n" + build_message(a1, quadrant(True, 1.9)))
+
+        # 9. OI-surge + volume-burst detection (pure logic, no network)
+        import time as _t
+        vt = VolumeTracker()
+        for _ in range(12):
+            assert vt.record_and_check("AAAUSDT", 100_000.0, mult=5.0) is None
+        vr = vt.record_and_check("AAAUSDT", 600_000.0, mult=5.0)   # 6x median
+        assert vr and 5.5 < vr < 6.5, vr
+        assert vt.record_and_check("AAAUSDT", 600_000.0, mult=0) is None  # disabled
+
+        ot = OITracker(rest=None)
+        now = _t.time()
+        for off, oi in [(300, 100), (240, 102), (180, 104), (120, 106), (60, 108), (0, 120)]:
+            ot._history.append((now - off, {"XXXUSDT": float(oi)}))
+        p1, p5 = ot.change_over("XXXUSDT", 60), ot.change_over("XXXUSDT", 300)
+        assert abs(p1 - 11.1) < 0.2 and abs(p5 - 20.0) < 0.1, (p1, p5)
+        print(f"[9] vol burst {vr:.1f}x | OI 1m {p1:+.1f}% 5m {p5:+.1f}%")
+        print("[9a]", build_vol_msg("AAAUSDT", 0.0061, 600_000, vr).split(chr(10))[0])
+        print("[9b]", build_oi_msg("XXXUSDT", "5m", p5, 0.0061).split(chr(10))[0])
+
         print("\nALL OK")
 
 

@@ -3,13 +3,25 @@ name: Publish to npm
 # Publishes the package to npm. Triggers:
 #   - manually from the Actions tab ("Run workflow"), or
 #   - automatically when a GitHub Release is published.
-# Requires a repo secret NPM_TOKEN (an npm granular/automation token with
-# write access — it bypasses 2FA, which is what lets CI publish).
+#
+# Auth — pick ONE (the workflow supports both):
+#   A) Trusted Publishing (recommended, no secret): on npmjs.com → the package →
+#      Settings → Trusted Publisher, add this repo + workflow `publish.yml`.
+#      Then publishing uses OIDC — no token to create, rotate, or leak.
+#   B) Token: create an npm automation/granular token with "Bypass 2FA" + write,
+#      add it as the repo secret NPM_TOKEN. Used as a fallback when set.
+#
+# Either way the publish is signed with provenance (the "Published via GitHub
+# Actions" badge on npm), which needs id-token: write below.
 
 on:
   workflow_dispatch:
   release:
     types: [published]
+
+permissions:
+  contents: read
+  id-token: write   # OIDC: npm provenance + trusted publishing
 
 jobs:
   publish:
@@ -22,6 +34,8 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
-      - run: npm publish
+      # npm >= 11.5 is required for OIDC trusted publishing.
+      - run: npm install -g npm@latest
+      - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

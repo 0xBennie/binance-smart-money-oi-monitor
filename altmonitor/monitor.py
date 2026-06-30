@@ -16,7 +16,8 @@ from models import Alert
 from notifier import Telegram
 from oi_tracker import OITracker
 from state import RuntimeSettings
-from symbols import fetch_usdt_perpetuals
+from symbols import base_asset, fetch_usdt_perpetuals
+from volume import VolumeTracker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,17 +69,56 @@ def build_message(a: Alert, quad: str) -> str:
     return "\n".join(lines)
 
 
+def _fmt_usd(v: float) -> str:
+    if v >= 1e9:
+        return f"${v / 1e9:.2f}B"
+    if v >= 1e6:
+        return f"${v / 1e6:.2f}M"
+    if v >= 1e3:
+        return f"${v / 1e3:.1f}K"
+    return f"${v:.0f}"
+
+
+def build_oi_msg(symbol: str, window: str, pct: float, price: float | None) -> str:
+    now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    head = "📈 OI 异动 · 仓位骤增" if pct >= 0 else "📉 OI 异动 · 仓位骤减"
+    lines = [
+        f"{head}  ({window})",
+        f"📌 {base_asset(symbol)}  ({symbol})",
+        f"📊 {window} OI 变化: {pct:+.1f}%",
+    ]
+    if price is not None:
+        lines.append(f"💲 价格: {_fmt_price(price)}")
+    lines.append(f"🕐 {now}")
+    return "\n".join(lines)
+
+
+def build_vol_msg(symbol: str, price: float, quote_vol: float, ratio: float) -> str:
+    now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    return "\n".join([
+        "🔊 爆量 · VOLUME SURGE",
+        f"📌 {base_asset(symbol)}  ({symbol})",
+        f"💲 价格: {_fmt_price(price)}",
+        f"📊 1min 成交额: {_fmt_usd(quote_vol)}  ≈ {ratio:.1f}× 近{config.VOL_BURST_LOOKBACK}根中位",
+        f"🕐 {now}",
+    ])
+
+
 class Monitor:
     def __init__(self, session: aiohttp.ClientSession):
         self._rest = BinanceREST(session)
         self._tg = Telegram(session)
         self._settings = RuntimeSettings()
         self._oi = OITracker(self._rest)
+        self._oi.set_on_sweep(self._check_oi_surges)
+        self._vol = VolumeTracker()
         self._history = History() if config.HISTORY_ENABLED else None
         self._cmds = CommandHandler(self._tg, self._settings, self._history)
         self._symbols: list[str] = []
         self._last_alert: dict[str, float] = {}
         self._alerted_candle: dict[str, int] = {}
+        self._last_fire: dict[tuple[str, str], float] = {}  # (symbol, kind) -> monotonic
+        self._last_price: dict[str, float] = {}             # latest close per symbol
 
     async def _load_symbols(self) -> None:
         self._symbols = await fetch_usdt_perpetuals(self._rest._session)
@@ -100,6 +140,60 @@ class Monitor:
             return False
         return True
 
+    def _should_fire(self, symbol: str, kind: str) -> bool:
+        """Per-(symbol, kind) cooldown so OI/volume alerts don't spam or collide
+        with price alerts."""
+        last = self._last_fire.get((symbol, kind))
+        now = time.monotonic()
+        if last is not None and (now - last) < self._settings.cooldown_sec:
+            return False
+        self._last_fire[(symbol, kind)] = now
+        return True
+
+    def _fire_volume(self, symbol: str, price: float, quote_vol: float, ratio: float) -> None:
+        text = build_vol_msg(symbol, price, quote_vol, ratio)
+        log.info("VOL %s %.1fx (%.0f USDT)", symbol, ratio, quote_vol)
+        if self._history:
+            self._history.record_event(
+                ts=time.time(), symbol=symbol, kind="vol", direction="UP",
+                price=price, metric=ratio, note=f"{quote_vol:.0f} USDT",
+            )
+        self._tg.enqueue_text(text)
+
+    def _fire_oi(self, symbol: str, window: str, pct: float) -> None:
+        price = self._last_price.get(symbol)
+        text = build_oi_msg(symbol, window, pct, price)
+        log.info("OI %s %s %+.1f%%", symbol, window, pct)
+        if self._history:
+            self._history.record_event(
+                ts=time.time(), symbol=symbol, kind="oi",
+                direction="UP" if pct >= 0 else "DOWN",
+                price=price, oi_change=pct, metric=pct, note=window,
+            )
+        self._tg.enqueue_text(text)
+
+    def _check_oi_surges(self) -> None:
+        """Run after each OI sweep: flag symbols whose OI moved past the 1m/5m
+        thresholds. Prefer the 5m signal (stronger) when both trip.
+
+        1m and 5m deliberately share ONE cooldown kind ("oi"): a single ongoing
+        OI surge trips both windows, and we want one alert for it, not two — the
+        `continue` dedupes within a sweep, the shared cooldown dedupes across
+        sweeps. (Price/volume alerts use their own kinds, so they're unaffected.)"""
+        s = self._settings
+        for symbol in self._oi.latest_symbols():
+            if not s.is_watched(symbol):
+                continue
+            if s.oi_surge_5m > 0:
+                p5 = self._oi.change_over(symbol, 300)
+                if p5 is not None and abs(p5) >= s.oi_surge_5m and self._should_fire(symbol, "oi"):
+                    self._fire_oi(symbol, "5m", p5)
+                    continue
+            if s.oi_surge_1m > 0:
+                p1 = self._oi.change_over(symbol, 60)
+                if p1 is not None and abs(p1) >= s.oi_surge_1m and self._should_fire(symbol, "oi"):
+                    self._fire_oi(symbol, "1m", p1)
+
     async def _handle_kline(self, msg: dict) -> None:
         k = msg.get("k")
         symbol = msg.get("s")
@@ -116,6 +210,20 @@ class Monitor:
             return
         if open_p == 0:
             return
+        self._last_price[symbol] = close_p
+
+        # Volume burst (爆量): only on a just-closed 1m candle, independent of the
+        # price move. record_and_check always updates the baseline; alert is gated
+        # by its own per-symbol cooldown.
+        if k.get("x"):
+            try:
+                qv = float(k.get("q", 0))
+            except (TypeError, ValueError):
+                qv = 0.0
+            ratio = self._vol.record_and_check(symbol, qv, self._settings.vol_burst_mult)
+            if ratio is not None and self._should_fire(symbol, "vol"):
+                self._fire_volume(symbol, close_p, qv, ratio)
+
         change = (close_p - open_p) / open_p * 100.0
 
         if not (change >= self._settings.pump_threshold
@@ -188,10 +296,15 @@ class Monitor:
     async def run(self) -> None:
         await self._load_symbols()
         s = self._settings
+        oi1 = f"{s.oi_surge_1m:.1f}%" if s.oi_surge_1m > 0 else "关"
+        oi5 = f"{s.oi_surge_5m:.1f}%" if s.oi_surge_5m > 0 else "关"
+        vol = f"{s.vol_burst_mult:.1f}x" if s.vol_burst_mult > 0 else "关"
         await self._tg.send_text(
             f"✅ 异动监控已启动\n"
             f"监控 {len(self._symbols)} 个 USDT 永续\n"
-            f"阈值: +{s.pump_threshold:.1f}% / {s.dump_threshold:.1f}% (1min)\n"
+            f"价格: +{s.pump_threshold:.1f}% / {s.dump_threshold:.1f}% (1min)\n"
+            f"OI异动: 1m {oi1} / 5m {oi5}\n"
+            f"爆量: {vol}\n"
             f"冷却: {s.cooldown_sec}s\n"
             f"发送 /help 查看命令"
         )
