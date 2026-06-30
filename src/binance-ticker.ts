@@ -15,7 +15,7 @@ import {
   detectBinanceBlockDetails,
   updateBinanceUsedWeight,
   waitForBinanceWeightHeadroom,
-} from './binance-rate-limit';
+} from './binance-rate-limit.js';
 
 const TICKER_24H_URL = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
 const PREMIUM_INDEX_URL = 'https://fapi.binance.com/fapi/v1/premiumIndex';

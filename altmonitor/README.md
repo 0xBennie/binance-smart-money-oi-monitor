@@ -1,0 +1,112 @@
+# 币安全市场 1 分钟异动监控 Bot
+
+扫描币安**全部 USDT 永续合约**,1 分钟价格涨/跌 ≥ 3% 时推送 Telegram 告警,
+并标注同期 OI(未平仓量)1 分钟变化方向(价 × 仓四象限)。
+
+```
+🟢 PUMP ALERT · 价↑仓↑ 多头进场
+📌 SWARMS  (SWARMSUSDT)
+💲 价格: 0.006161
+📈 1min 涨幅: +3.2%
+📊 1min OI: +1.9%
+📐 振幅: 7.4%
+⚖️ 多空比: 1.85 (偏多)
+🕐 2026-06-25 00:52:01
+```
+
+数据全部来自币安**免费公开接口**(WebSocket 价格 + REST OI/多空比),无需 API key、不烧任何额度。
+
+**特性**
+- 全市场 USDT 永续(~530 个),1 分钟 ±3% 触发,价 × 仓四象限标注
+- 告警附带 **振幅 + 多空比(LSR)**
+- **SQLite 历史**:每条告警存档,`/history`、`/stats` 在 TG 里复盘
+- **Telegram 命令实时调参**,不用改 `.env` 重启,配置持久化到 `state.json`
+- 内置币安 429/418 退避 + Telegram 发送限速队列,防限频 / 防封 IP / 防刷屏
+
+## 本地运行
+
+```bash
+cd altmonitor
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env      # 填入 TG_BOT_TOKEN 和 TG_CHAT_ID
+python monitor.py
+```
+
+启动后会先发一条「✅ 异动监控已启动」确认消息。
+
+### 拿 Telegram 凭据
+1. 找 `@BotFather` → `/newbot` → 拿到 `TG_BOT_TOKEN`
+2. 把 bot 拉进你的群,设为管理员(频道同理)
+3. 群组 `TG_CHAT_ID`(负数)找 `@getidsbot`;私聊找 `@userinfobot`
+
+## VPS 常驻(systemd)
+
+```ini
+# /etc/systemd/system/altmonitor.service
+[Unit]
+Description=Binance Alt Monitor
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/altmonitor
+ExecStart=/opt/altmonitor/.venv/bin/python monitor.py
+Restart=always
+RestartSec=5
+User=ubuntu
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now altmonitor
+journalctl -u altmonitor -f          # 看日志
+```
+
+## Telegram 命令(直接在群里发,实时生效)
+| 命令 | 作用 |
+|---|---|
+| `/status` | 查看当前配置 |
+| `/set_pump 5` | 涨幅阈值改成 +5% |
+| `/set_dump -5` | 跌幅阈值改成 -5% |
+| `/cooldown 120` | 同币告警冷却 120s |
+| `/watch sol doge` | 只看这几个币(留空 `/watch` = 全部) |
+| `/unwatch sol` | 移出关注列表 |
+| `/mute play` / `/unmute play` | 屏蔽 / 取消屏蔽某币 |
+| `/history 20 sol` | 最近 20 条告警(可带币种) |
+| `/stats 24` | 近 24 小时异动榜(哪些币最常异动) |
+| `/help` | 命令帮助 |
+
+只有 `TG_CHAT_ID`(或 `.env` 里 `ALLOWED_CHAT_IDS`)允许的会话能发命令。改动写入 `state.json`,**重启不丢**。
+
+## 可调参数(写在 `.env`)
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `PUMP_THRESHOLD` | 3.0 | 涨幅触发线(%) |
+| `DUMP_THRESHOLD` | -3.0 | 跌幅触发线(%) |
+| `COOLDOWN_SEC` | 180 | 同一币两次告警最小间隔 |
+| `OI_POLL_SEC` | 60 | OI 全市场轮询周期 |
+| `OI_CONCURRENCY` | 15 | OI 并发请求数 |
+| `SYMBOLS_REFRESH_SEC` | 3600 | 交易对列表刷新间隔 |
+| `TG_MIN_SEND_INTERVAL` | 3.2 | 两条消息最小间隔(防撞 TG 限速) |
+| `ALLOWED_CHAT_IDS` | (空) | 额外允许发命令的 chat id,逗号分隔 |
+| `LSR_PERIOD` | 5m | 多空比粒度(币安最小 5m) |
+| `HISTORY_ENABLED` | true | 是否存 SQLite 历史 |
+| `DB_FILE` | alerts.db | 历史数据库文件 |
+
+## 设计说明
+- **价格**:单条 WebSocket 订阅全市场 `@kline_1m`,实时算当根 1 分钟 K 线 `(收-开)/开`。
+- **OI**:后台每 `OI_POLL_SEC`(默认 60s)用 `fapi/v1/openInterest` 扫全市场(权重 1/币,~530 币 << 2400/min 限频),维护上一轮快照算变化;触发价格告警时读取,缺失则标 `N/A`,不阻断。**仅当相邻两轮间隔接近 `OI_POLL_SEC`(0.5–2.5×)时才给值**,否则标 `N/A`——避免慢扫/退避期把多分钟跨度误标成「1min」。
+- **去重**:同一币同一根 1m K 线只推一次 + 按币冷却(冷却计时在内存,重启后重置)。
+- **持久化**:运行配置写 `state.json`(`/set_*`、`/watch` 等重启不丢);开启 `HISTORY_ENABLED` 时每条告警入 `alerts.db`(SQLite),供 `/history`、`/stats` 复盘。
+
+---
+
+## 作者 & 联系
+
+**Bennie Strategy** 出品(本工具是 [binance-smart-money-oi-monitor](../README.md) 仓库的 Python 伴随组件)。
+
+- 🐦 X / 推特:[@0xBenniee](https://x.com/0xBenniee)
+- 💬 Telegram:[@OxBennie](https://t.me/OxBennie)

@@ -1,26 +1,70 @@
 {
-  "name": "binance-smart-money-tracker",
+  "name": "binance-smart-money-oi-monitor",
   "version": "1.0.0",
-  "description": "Production-grade Binance Smart Signal (Smart Money) tracker — 17 whale fields, 7-layer 418 protection, sqlite + express dashboard.",
+  "description": "Binance Smart Money (Smart Signal) + Open Interest anomaly monitor — 17 whale fields the public fapi can't give you, an MCP server for any terminal AI, 7-layer 418 protection. A Bennie Strategy project.",
   "license": "MIT",
-  "author": "0xBennie",
+  "author": "Bennie Strategy (0xBenniee) <https://x.com/0xBenniee>",
+  "funding": "https://x.com/0xBenniee",
   "type": "module",
+  "keywords": [
+    "binance",
+    "smart-money",
+    "smart-signal",
+    "whale",
+    "open-interest",
+    "long-short-ratio",
+    "crypto",
+    "mcp",
+    "model-context-protocol",
+    "trading"
+  ],
+  "homepage": "https://github.com/0xBennie/binance-smart-money-oi-monitor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xBennie/binance-smart-money-oi-monitor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0xBennie/binance-smart-money-oi-monitor/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "binance-smart-money-oi-monitor": "dist/scripts/mcp-server.js",
+    "binance-smart-money-oi-monitor-mcp": "dist/scripts/mcp-server.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
   "scripts": {
     "smart-money:tick": "tsx src/scripts/smart-money-tick.ts",
     "top-trader:tick": "tsx src/scripts/top-trader-tick.ts",
     "oi:tick": "tsx src/scripts/oi-tick.ts",
     "dashboard": "tsx src/scripts/smart-money-dashboard.ts",
+    "mcp": "tsx src/scripts/mcp-server.ts",
     "demo": "tsx src/scripts/push-demo.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "axios": "^1.7.0",
+    "dotenv": "^16.4.0"
+  },
+  "optionalDependencies": {
     "better-sqlite3": "^12.0.0",
-    "dotenv": "^16.4.0",
     "express": "^4.19.0"
   },
   "devDependencies": {

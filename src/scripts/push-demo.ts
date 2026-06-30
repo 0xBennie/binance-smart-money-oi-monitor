@@ -9,10 +9,10 @@
  * back to "—" gracefully.
  */
 import 'dotenv/config';
-import { getSmartMoneyOverview } from '../binance-smart-money';
-import { getOpenInterest } from '../binance-open-interest';
-import { getTicker24h, getFundingInfo, fundingCountdownString } from '../binance-ticker';
-import { formatSmartMoneyPush, formatSmartMoneyPushPlain } from '../format';
+import { getSmartMoneyOverview } from '../binance-smart-money.js';
+import { getOpenInterest } from '../binance-open-interest.js';
+import { getTicker24h, getFundingInfo, fundingCountdownString } from '../binance-ticker.js';
+import { formatSmartMoneyPush, formatSmartMoneyPushPlain } from '../format.js';
 
 const SYMBOL = (process.argv[2] || 'BILLUSDT').toUpperCase();
 

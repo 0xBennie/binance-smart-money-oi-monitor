@@ -20,10 +20,10 @@
  */
 import 'dotenv/config';
 import axios from 'axios';
-import { storage } from '../storage';
-import { getTopTraderSnapshotsBatch, type TopTraderPeriod } from '../binance-top-trader';
-import { preflightBinanceFapi } from '../binance-rate-limit';
-import { installGracefulShutdown } from '../cron-utils';
+import { storage } from '../storage.js';
+import { getTopTraderSnapshotsBatch, type TopTraderPeriod } from '../binance-top-trader.js';
+import { preflightBinanceFapi } from '../binance-rate-limit.js';
+import { installGracefulShutdown } from '../cron-utils.js';
 
 const POOL_MAX    = parseInt(process.env.TOP_TRADER_POOL_MAX    || '0', 10);
 const SHARD_INDEX = parseInt(process.env.TOP_TRADER_SHARD_INDEX || '0', 10);

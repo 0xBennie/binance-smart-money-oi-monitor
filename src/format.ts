@@ -6,8 +6,8 @@
 // Output uses parse_mode: HTML (<b>/<i>/<code>) plus monospace alignment +
 // emoji color cues that mimic the binance Smart Money dashboard.
 
-import type { SmartMoneyOverview } from './binance-smart-money';
-import type { OpenInterestSnapshot } from './binance-open-interest';
+import type { SmartMoneyOverview } from './binance-smart-money.js';
+import type { OpenInterestSnapshot } from './binance-open-interest.js';
 
 export interface FormatterInput {
   symbol: string;

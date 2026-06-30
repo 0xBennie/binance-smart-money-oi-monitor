@@ -17,10 +17,10 @@
  */
 import 'dotenv/config';
 import axios from 'axios';
-import { storage } from '../storage';
-import { getOpenInterestBatch } from '../binance-open-interest';
-import { preflightBinanceFapi } from '../binance-rate-limit';
-import { installGracefulShutdown } from '../cron-utils';
+import { storage } from '../storage.js';
+import { getOpenInterestBatch } from '../binance-open-interest.js';
+import { preflightBinanceFapi } from '../binance-rate-limit.js';
+import { installGracefulShutdown } from '../cron-utils.js';
 
 const POOL_MAX    = parseInt(process.env.OI_POOL_MAX    || '0', 10);
 const SHARD_INDEX = parseInt(process.env.OI_SHARD_INDEX || '0', 10);
