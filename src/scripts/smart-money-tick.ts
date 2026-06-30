@@ -103,13 +103,13 @@ async function main(): Promise<void> {
     );
   }
 
-  const snapshots = await getSmartMoneyOverviewBatch(pool, SPACING_MS, JITTER_MS);
-
+  // Write each snapshot the moment it lands — a mid-run crash/418 then keeps
+  // everything captured so far instead of discarding the whole batch.
   let written = 0;
-  for (const snap of snapshots.values()) {
-    storage.recordSmartMoney(snap);
-    written++;
-  }
+  const snapshots = await getSmartMoneyOverviewBatch(
+    pool, SPACING_MS, JITTER_MS,
+    (_sym, snap) => { storage.recordSmartMoney(snap); written++; }
+  );
 
   // Opportunistic cleanup (cheap, single DELETE)
   const cleaned = storage.cleanup();

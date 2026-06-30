@@ -84,19 +84,10 @@ function getLatestSnapshots(): EnrichedRow[] {
       // Derive SM USD notional from quantity × avg-entry (units are known),
       // not from `totalPositions` (binance returns inconsistent units).
       const smNotionalUsd = smartMoneyNotionalUsd({
-        symbol: r.symbol, ts: r.ts,
-        totalPositions: r.total_positions, totalTraders: r.total_traders,
-        longShortRatio: r.long_short_ratio,
-        longTraders: r.long_traders, longTradersQty: r.long_traders_qty,
+        longTradersQty: r.long_traders_qty,
         longTradersAvgEntryPrice: r.long_traders_avg_entry_price,
-        shortTraders: r.short_traders, shortTradersQty: r.short_traders_qty,
+        shortTradersQty: r.short_traders_qty,
         shortTradersAvgEntryPrice: r.short_traders_avg_entry_price,
-        longWhales: r.long_whales, longWhalesQty: r.long_whales_qty,
-        longWhalesAvgEntryPrice: r.long_whales_avg_entry_price,
-        shortWhales: r.short_whales, shortWhalesQty: r.short_whales_qty,
-        shortWhalesAvgEntryPrice: r.short_whales_avg_entry_price,
-        longProfitTraders: r.long_profit_traders, shortProfitTraders: r.short_profit_traders,
-        longProfitWhales: r.long_profit_whales, shortProfitWhales: r.short_profit_whales,
       });
       const smRatio = r.oi_now_usd && r.oi_now_usd > 0 && smNotionalUsd > 0
         ? smNotionalUsd / r.oi_now_usd

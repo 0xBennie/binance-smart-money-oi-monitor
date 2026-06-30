@@ -36,7 +36,12 @@ const REQ_HEADERS = {
 
 export interface SmartMoneyOverview {
   symbol: string;
-  ts: number;                          // API updateTime
+  ts: number;                          // capture time (ms, Date.now() at fetch)
+  signalDay: number;                   // Binance's `updateTime` — the daily signal-cohort
+                                       // marker. It only advances once per UTC day and is
+                                       // shared across all symbols, so it must NOT be used as
+                                       // the snapshot timestamp (the position numbers below
+                                       // refresh minute-to-minute under the same signalDay).
   totalPositions: number;
   totalTraders: number;
   longShortRatio: number;              // = longTraders / shortTraders
@@ -72,7 +77,8 @@ function parse(symbol: string, raw: any): SmartMoneyOverview | null {
   };
   return {
     symbol,
-    ts: Number(raw.updateTime ?? Date.now()),
+    ts: Date.now(),                       // capture time — see field doc above
+    signalDay: Number(raw.updateTime ?? 0),
     totalPositions: num(raw.totalPositions),
     totalTraders: parseInt(raw.totalTraders, 10) || 0,
     longShortRatio: num(raw.longShortRatio),
@@ -140,7 +146,15 @@ export async function getSmartMoneyOverview(
  * This is the long-side + short-side gross notional, which is what you compare
  * against `openInterestHist.sumOpenInterestValue` (also gross notional in USD).
  */
-export function smartMoneyNotionalUsd(sm: SmartMoneyOverview): number {
+// Only the four qty/avg-entry fields are needed — accept any object that has
+// them (a full SmartMoneyOverview, or a row read back from the DB) so callers
+// don't have to reconstruct the whole 17-field shape just to do the math.
+type NotionalFields = Pick<
+  SmartMoneyOverview,
+  'longTradersQty' | 'longTradersAvgEntryPrice' | 'shortTradersQty' | 'shortTradersAvgEntryPrice'
+>;
+
+export function smartMoneyNotionalUsd(sm: NotionalFields): number {
   const long = sm.longTradersQty * sm.longTradersAvgEntryPrice;
   const short = sm.shortTradersQty * sm.shortTradersAvgEntryPrice;
   return long + short;
@@ -156,7 +170,7 @@ export function smartMoneyNotionalUsd(sm: SmartMoneyOverview): number {
  *   > 0.30  : SM dominates the orderbook, price discovery follows SM positioning
  */
 export function smartMoneyShareOfOI(
-  sm: SmartMoneyOverview,
+  sm: NotionalFields,
   oiNowUsd: number | null | undefined
 ): number | null {
   if (!oiNowUsd || oiNowUsd <= 0) return null;
@@ -168,11 +182,17 @@ export function smartMoneyShareOfOI(
 /**
  * Batch (cron use): serial + spacing + jitter, abort immediately on circuit-break.
  * 12s spacing × ±3s jitter is the empirical safe rate for web bapi.
+ *
+ * `onResult` fires as each symbol's snapshot lands, so callers can persist
+ * incrementally. A full ~500-symbol pull takes ~100 min; writing only after the
+ * whole batch resolves means a crash or 418 mid-run discards everything captured
+ * so far. Stream each row to storage instead.
  */
 export async function getSmartMoneyOverviewBatch(
   symbols: string[],
   spacingMs = 12_000,
-  jitterMs = 3_000
+  jitterMs = 3_000,
+  onResult?: (symbol: string, snap: SmartMoneyOverview) => void
 ): Promise<Map<string, SmartMoneyOverview>> {
   const out = new Map<string, SmartMoneyOverview>();
   for (const sym of symbols) {
@@ -181,7 +201,12 @@ export async function getSmartMoneyOverviewBatch(
       break;
     }
     const s = await getSmartMoneyOverview(sym);
-    if (s) out.set(sym, s);
+    if (s) {
+      out.set(sym, s);
+      if (onResult) {
+        try { onResult(sym, s); } catch (e) { console.warn(`[smart-money-batch] onResult(${sym}) failed:`, e); }
+      }
+    }
     if (spacingMs > 0) {
       const jitter = jitterMs ? (Math.random() * 2 - 1) * jitterMs : 0;
       await new Promise(r => setTimeout(r, Math.max(0, spacingMs + jitter)));
