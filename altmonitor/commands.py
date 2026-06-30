@@ -13,6 +13,8 @@ HELP = (
     "/status — 查看当前配置\n"
     "/set_pump <数> — 涨幅阈值%，如 /set_pump 5\n"
     "/set_dump <数> — 跌幅阈值%（负数），如 /set_dump -5\n"
+    "/set_oi <1m%> [5m%] — OI异动阈值，如 /set_oi 3 6（0=关）\n"
+    "/set_vol <倍> — 爆量阈值（成交额/中位），如 /set_vol 5（0=关）\n"
     "/cooldown <秒> — 同币告警冷却\n"
     "/watch <币...> — 只看这些币（留空=全部），如 /watch sol doge\n"
     "/unwatch <币...> — 移出关注列表\n"
@@ -84,6 +86,18 @@ class CommandHandler:
                 s.dump_threshold = -abs(v)
                 s.save()
                 return f"✅ 跌幅阈值 = {s.dump_threshold:.1f}%"
+            if cmd == "/set_oi":
+                s.oi_surge_1m = max(0.0, float(args[0]))
+                if len(args) > 1:
+                    s.oi_surge_5m = max(0.0, float(args[1]))
+                s.save()
+                oi1 = f"{s.oi_surge_1m:.1f}%" if s.oi_surge_1m > 0 else "关"
+                oi5 = f"{s.oi_surge_5m:.1f}%" if s.oi_surge_5m > 0 else "关"
+                return f"✅ OI异动: 1m {oi1} / 5m {oi5}"
+            if cmd == "/set_vol":
+                s.vol_burst_mult = max(0.0, float(args[0]))
+                s.save()
+                return f"✅ 爆量阈值 = {s.vol_burst_mult:.1f}x" if s.vol_burst_mult > 0 else "✅ 爆量监控已关闭"
             if cmd == "/cooldown":
                 s.cooldown_sec = max(0, int(args[0]))
                 s.save()

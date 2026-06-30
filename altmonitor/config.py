@@ -46,6 +46,16 @@ DUMP_THRESHOLD = _f("DUMP_THRESHOLD", -3.0)   # 1min change <= -3.0%  -> DUMP
 # --- Anti-spam ---
 COOLDOWN_SEC = _i("COOLDOWN_SEC", 180)        # per-symbol cooldown between alerts
 
+# --- OI surge thresholds (percent; 0 disables that window) ---
+OI_SURGE_PCT_1M = _f("OI_SURGE_PCT_1M", 3.0)  # |OI change| over ~1min >= this -> alert
+OI_SURGE_PCT_5M = _f("OI_SURGE_PCT_5M", 6.0)  # |OI change| over ~5min >= this -> alert
+
+# --- Volume burst (爆量) — a just-closed 1m candle's quote volume (USDT) vs its
+#     own trailing baseline. 0 multiplier disables. ---
+VOL_BURST_MULT = _f("VOL_BURST_MULT", 5.0)             # candle vol >= MULT x trailing median
+VOL_BURST_LOOKBACK = _i("VOL_BURST_LOOKBACK", 20)      # candles used for the baseline
+VOL_BURST_MIN_USDT = _f("VOL_BURST_MIN_USDT", 50_000)  # ignore illiquid noise below this
+
 # --- Telegram command access / send pacing ---
 # Comma-separated chat ids allowed to issue commands. Empty -> only TG_CHAT_ID.
 ALLOWED_CHAT_IDS = [

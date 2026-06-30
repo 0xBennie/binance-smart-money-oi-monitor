@@ -1,27 +1,40 @@
-# 币安全市场 1 分钟异动监控 Bot
+# 币安全市场异动监控 Bot（价格 / OI / 爆量）
 
-扫描币安**全部 USDT 永续合约**,1 分钟价格涨/跌 ≥ 3% 时推送 Telegram 告警,
-并标注同期 OI(未平仓量)1 分钟变化方向(价 × 仓四象限)。
+扫描币安**全部 USDT 永续合约**,推送三类 Telegram 告警:**① 1 分钟价格异动**(±3%,带价 × 仓四象限)、**② OI 异动**(1 分钟 / 5 分钟未平仓量骤变)、**③ 爆量**(单根 1m 成交额相对自身基线突增)。
 
 ```
-🟢 PUMP ALERT · 价↑仓↑ 多头进场
-📌 SWARMS  (SWARMSUSDT)
-💲 价格: 0.006161
-📈 1min 涨幅: +3.2%
-📊 1min OI: +1.9%
+🟢 PUMP ALERT · 价↑仓↑ 多头进场       📈 OI 异动 · 仓位骤增  (5m)        🔊 爆量 · VOLUME SURGE
+📌 SWARMS  (SWARMSUSDT)               📌 ZK  (ZKUSDT)                    📌 MOODENG  (MOODENGUSDT)
+💲 价格: 0.006161                      📊 5m OI 变化: +21.4%              💲 价格: 0.31
+📈 1min 涨幅: +3.2%                     💲 价格: 0.1284                    📊 1min 成交额: $4.20M ≈ 8.3× 近20根中位
+📊 1min OI: +1.9%                       🕐 …                              🕐 …
 📐 振幅: 7.4%
 ⚖️ 多空比: 1.85 (偏多)
 🕐 2026-06-25 00:52:01
 ```
 
-数据全部来自币安**免费公开接口**(WebSocket 价格 + REST OI/多空比),无需 API key、不烧任何额度。
+数据全部来自币安**免费公开接口**(WebSocket K线 + REST OI/多空比),无需 API key、不烧任何额度。
 
 **特性**
-- 全市场 USDT 永续(~530 个),1 分钟 ±3% 触发,价 × 仓四象限标注
-- 告警附带 **振幅 + 多空比(LSR)**
-- **SQLite 历史**:每条告警存档,`/history`、`/stats` 在 TG 里复盘
-- **Telegram 命令实时调参**,不用改 `.env` 重启,配置持久化到 `state.json`
+- 全市场 USDT 永续(~530 个),三类告警:**价格 ±3% / OI 1m·5m 异动 / 爆量**
+- 价格告警附带 **振幅 + 多空比(LSR)** + 价 × 仓四象限
+- **OI 窗口校验**:仅在相邻采样间隔接近设定周期时给值,慢扫/退避期标 N/A,不误报「1min」
+- **爆量基线**:对比该币自身近 N 根 1m 成交额中位,带绝对额下限过滤小币噪音
+- **SQLite 历史**:三类告警都存档,`/history`、`/stats` 在 TG 里复盘
+- **Telegram 命令实时调参**(含 `/set_oi`、`/set_vol`),不用改 `.env` 重启,持久化到 `state.json`
 - 内置币安 429/418 退避 + Telegram 发送限速队列,防限频 / 防封 IP / 防刷屏
+
+## Docker 一键部署（推荐）
+
+在仓库根目录:
+
+```bash
+cp altmonitor/.env.example altmonitor/.env   # 填 TG_BOT_TOKEN + TG_CHAT_ID
+docker compose up -d                          # 构建 + 后台运行，崩溃自动重启
+docker compose logs -f                        # 看日志
+```
+
+`state.json` 和 `alerts.db` 持久化在命名卷里,重启不丢。停止: `docker compose down`。
 
 ## 本地运行
 
@@ -71,6 +84,8 @@ journalctl -u altmonitor -f          # 看日志
 | `/status` | 查看当前配置 |
 | `/set_pump 5` | 涨幅阈值改成 +5% |
 | `/set_dump -5` | 跌幅阈值改成 -5% |
+| `/set_oi 3 6` | OI 异动阈值：1m 3% / 5m 6%（`0`=关该窗口） |
+| `/set_vol 5` | 爆量阈值：成交额 ≥ 5× 近 N 根中位（`0`=关） |
 | `/cooldown 120` | 同币告警冷却 120s |
 | `/watch sol doge` | 只看这几个币(留空 `/watch` = 全部) |
 | `/unwatch sol` | 移出关注列表 |
@@ -86,7 +101,12 @@ journalctl -u altmonitor -f          # 看日志
 |---|---|---|
 | `PUMP_THRESHOLD` | 3.0 | 涨幅触发线(%) |
 | `DUMP_THRESHOLD` | -3.0 | 跌幅触发线(%) |
-| `COOLDOWN_SEC` | 180 | 同一币两次告警最小间隔 |
+| `OI_SURGE_PCT_1M` | 3.0 | 1分钟 OI 异动触发线(%)，`0`=关 |
+| `OI_SURGE_PCT_5M` | 6.0 | 5分钟 OI 异动触发线(%)，`0`=关 |
+| `VOL_BURST_MULT` | 5.0 | 爆量倍数（成交额/近N根中位），`0`=关 |
+| `VOL_BURST_LOOKBACK` | 20 | 爆量基线用的历史根数 |
+| `VOL_BURST_MIN_USDT` | 50000 | 爆量绝对成交额下限（过滤小币噪音） |
+| `COOLDOWN_SEC` | 180 | 同一币同类告警最小间隔 |
 | `OI_POLL_SEC` | 60 | OI 全市场轮询周期 |
 | `OI_CONCURRENCY` | 15 | OI 并发请求数 |
 | `SYMBOLS_REFRESH_SEC` | 3600 | 交易对列表刷新间隔 |
@@ -98,8 +118,10 @@ journalctl -u altmonitor -f          # 看日志
 
 ## 设计说明
 - **价格**:单条 WebSocket 订阅全市场 `@kline_1m`,实时算当根 1 分钟 K 线 `(收-开)/开`。
-- **OI**:后台每 `OI_POLL_SEC`(默认 60s)用 `fapi/v1/openInterest` 扫全市场(权重 1/币,~530 币 << 2400/min 限频),维护上一轮快照算变化;触发价格告警时读取,缺失则标 `N/A`,不阻断。**仅当相邻两轮间隔接近 `OI_POLL_SEC`(0.5–2.5×)时才给值**,否则标 `N/A`——避免慢扫/退避期把多分钟跨度误标成「1min」。
-- **去重**:同一币同一根 1m K 线只推一次 + 按币冷却(冷却计时在内存,重启后重置)。
+- **OI**:后台每 `OI_POLL_SEC`(默认 60s)用 `fapi/v1/openInterest` 扫全市场(权重 1/币,~530 币 << 2400/min 限频),维护**带时间戳的环形缓冲**(~12 分钟)。**仅当相邻采样间隔接近目标窗口(0.5–2.5×)时才给值**,否则标 `N/A`——避免慢扫/退避期把多分钟跨度误标成「1min」。
+- **OI 异动**:每轮扫描后比对 1m / 5m 两个窗口的 OI 变化,超阈值即推(5m 与 1m 同时触发时优先推更强的 5m)。
+- **爆量(成交量)**:用 K线流里**收盘** 1m 的成交额(`q`,USDT),对比该币近 `VOL_BURST_LOOKBACK` 根的**中位数**;≥ `VOL_BURST_MULT` 倍且超过 `VOL_BURST_MIN_USDT` 才算爆量(中位数抗个别尖峰、绝对额下限滤小币)。
+- **去重**:价格告警按「同币同一根 1m K线只推一次 + 按币冷却」;OI / 爆量各按「(币,类型)」独立冷却,互不挤占(冷却计时在内存,重启后重置)。
 - **持久化**:运行配置写 `state.json`(`/set_*`、`/watch` 等重启不丢);开启 `HISTORY_ENABLED` 时每条告警入 `alerts.db`(SQLite),供 `/history`、`/stats` 复盘。
 
 ---

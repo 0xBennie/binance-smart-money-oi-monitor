@@ -1,45 +1,71 @@
-"""Background poller that maintains the 1-minute Open-Interest change per symbol."""
+"""Background poller for full-market Open Interest, with 1m / 5m change windows."""
 import asyncio
 import logging
 import time
+from collections import deque
 
 import config
 from binance_rest import BinanceREST
 
 log = logging.getLogger("oi")
 
+# Keep ~12 minutes of 60s snapshots so both the 1m and 5m lookbacks resolve.
+_HISTORY_LEN = 12
+
 
 class OITracker:
-    """Polls full-market OI every OI_POLL_SEC and exposes the 1-min % change."""
+    """Polls full-market OI every OI_POLL_SEC and exposes %change over a window."""
 
     def __init__(self, rest: BinanceREST):
         self._rest = rest
-        self._prev: dict[str, float] = {}   # last sweep
-        self._curr: dict[str, float] = {}   # latest sweep
-        self._prev_ts = 0.0                 # wall time of the prev sweep
-        self._curr_ts = 0.0                 # wall time of the curr sweep
         self._symbols: list[str] = []
         self._sem = asyncio.Semaphore(config.OI_CONCURRENCY)
+        # ring buffer of (wall_ts, {symbol: oi}); newest is last
+        self._history: deque[tuple[float, dict[str, float]]] = deque(maxlen=_HISTORY_LEN)
+        self._on_sweep = None  # optional no-arg callback run after each completed sweep
 
     def set_symbols(self, symbols: list[str]) -> None:
         self._symbols = symbols
 
-    def change_pct(self, symbol: str) -> float | None:
-        """OI change in percent between the two most recent sweeps, or None.
+    def set_on_sweep(self, cb) -> None:
+        """Register a callback fired right after each OI sweep lands."""
+        self._on_sweep = cb
 
-        Returns None unless the two sweeps are spaced close to OI_POLL_SEC apart.
-        A long sweep or a 429 backoff can stretch the gap to several minutes; in
-        that case the delta is no longer a ~1-minute window, so we report N/A
-        rather than a misleading number labelled "1min".
+    def latest_symbols(self) -> list[str]:
+        return list(self._history[-1][1].keys()) if self._history else []
+
+    def change_pct(self, symbol: str) -> float | None:
+        """~1-min OI change (latest vs ~OI_POLL_SEC ago), or None if not resolvable."""
+        return self.change_over(symbol, config.OI_POLL_SEC)
+
+    def change_over(self, symbol: str, window_sec: float, tol_frac: float = 0.5) -> float | None:
+        """OI %change from ~`window_sec` ago to now, or None.
+
+        Picks the historical snapshot whose age is closest to `window_sec` and only
+        returns a value when that age is within ±`tol_frac`·`window_sec`. So a stalled
+        poller (e.g. during a 429 backoff) reports N/A instead of a wrong window.
         """
-        prev = self._prev.get(symbol)
-        curr = self._curr.get(symbol)
-        if prev is None or curr is None or prev == 0:
+        if not self._history:
             return None
-        gap = self._curr_ts - self._prev_ts
-        if not (config.OI_POLL_SEC * 0.5 <= gap <= config.OI_POLL_SEC * 2.5):
+        now_ts, now_snap = self._history[-1]
+        curr = now_snap.get(symbol)
+        if curr is None or curr == 0:
             return None
-        return (curr - prev) / prev * 100.0
+        tol = window_sec * tol_frac
+        best = None
+        best_err = None
+        for ts, snap in self._history:
+            if ts >= now_ts:                 # skip the latest point itself
+                continue
+            past = snap.get(symbol)
+            if past is None or past == 0:
+                continue
+            err = abs((now_ts - ts) - window_sec)
+            if err <= tol and (best_err is None or err < best_err):
+                best, best_err = past, err
+        if best is None:
+            return None
+        return (curr - best) / best * 100.0
 
     async def _fetch_one(self, symbol: str) -> tuple[str, float | None]:
         async with self._sem:
@@ -52,19 +78,21 @@ class OITracker:
             return symbol, None
 
     async def run(self) -> None:
-        """Sweep OI forever. Each cycle shifts curr -> prev, then refetches."""
+        """Sweep OI forever, appending each snapshot and firing the sweep callback."""
         while True:
             start = time.monotonic()
             if self._symbols:
-                results = await asyncio.gather(
-                    *(self._fetch_one(s) for s in self._symbols)
-                )
+                results = await asyncio.gather(*(self._fetch_one(s) for s in self._symbols))
                 snapshot = {s: oi for s, oi in results if oi is not None}
                 if snapshot:
-                    self._prev, self._prev_ts = self._curr, self._curr_ts
-                    self._curr, self._curr_ts = snapshot, time.time()
+                    self._history.append((time.time(), snapshot))
                     log.debug("OI sweep: %d symbols", len(snapshot))
+                    if self._on_sweep:
+                        try:
+                            self._on_sweep()
+                        except Exception as e:  # noqa: BLE001
+                            log.warning("on_sweep callback failed: %s", e)
             elapsed = time.monotonic() - start
-            # Floor of 5s (not 1s): if a sweep ever runs past OI_POLL_SEC, don't
-            # immediately fire another full-market sweep back-to-back.
+            # Floor of 5s: if a sweep ever runs past OI_POLL_SEC, don't immediately
+            # fire another full-market sweep back-to-back.
             await asyncio.sleep(max(5.0, config.OI_POLL_SEC - elapsed))

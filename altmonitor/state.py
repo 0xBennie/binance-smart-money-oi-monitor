@@ -26,6 +26,9 @@ class RuntimeSettings:
         self.pump_threshold = config.PUMP_THRESHOLD
         self.dump_threshold = config.DUMP_THRESHOLD
         self.cooldown_sec = config.COOLDOWN_SEC
+        self.oi_surge_1m = config.OI_SURGE_PCT_1M    # 0 disables
+        self.oi_surge_5m = config.OI_SURGE_PCT_5M    # 0 disables
+        self.vol_burst_mult = config.VOL_BURST_MULT  # 0 disables
         self.watchlist: set[str] = set()   # empty == monitor ALL symbols
         self.muted: set[str] = set()
         self._load()
@@ -40,6 +43,9 @@ class RuntimeSettings:
             self.pump_threshold = float(d.get("pump_threshold", self.pump_threshold))
             self.dump_threshold = float(d.get("dump_threshold", self.dump_threshold))
             self.cooldown_sec = int(d.get("cooldown_sec", self.cooldown_sec))
+            self.oi_surge_1m = float(d.get("oi_surge_1m", self.oi_surge_1m))
+            self.oi_surge_5m = float(d.get("oi_surge_5m", self.oi_surge_5m))
+            self.vol_burst_mult = float(d.get("vol_burst_mult", self.vol_burst_mult))
             self.watchlist = set(d.get("watchlist", []))
             self.muted = set(d.get("muted", []))
             log.info("Loaded persisted state from %s", config.STATE_FILE)
@@ -51,6 +57,9 @@ class RuntimeSettings:
             "pump_threshold": self.pump_threshold,
             "dump_threshold": self.dump_threshold,
             "cooldown_sec": self.cooldown_sec,
+            "oi_surge_1m": self.oi_surge_1m,
+            "oi_surge_5m": self.oi_surge_5m,
+            "vol_burst_mult": self.vol_burst_mult,
             "watchlist": sorted(self.watchlist),
             "muted": sorted(self.muted),
         }
@@ -77,10 +86,15 @@ class RuntimeSettings:
             else "全部币种"
         )
         mt = ", ".join(base_asset(s) for s in sorted(self.muted)) if self.muted else "无"
+        oi1 = f"{self.oi_surge_1m:.1f}%" if self.oi_surge_1m > 0 else "关"
+        oi5 = f"{self.oi_surge_5m:.1f}%" if self.oi_surge_5m > 0 else "关"
+        vol = f"{self.vol_burst_mult:.1f}x" if self.vol_burst_mult > 0 else "关"
         return (
             "⚙️ 当前配置\n"
             f"涨幅阈值: +{self.pump_threshold:.1f}%\n"
             f"跌幅阈值: {self.dump_threshold:.1f}%\n"
+            f"OI异动: 1m {oi1} / 5m {oi5}\n"
+            f"爆量: {vol}（vs 近 {config.VOL_BURST_LOOKBACK} 根中位）\n"
             f"冷却: {self.cooldown_sec}s\n"
             f"关注列表: {wl}\n"
             f"屏蔽: {mt}"
