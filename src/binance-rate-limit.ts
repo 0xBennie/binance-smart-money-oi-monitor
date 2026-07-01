@@ -128,7 +128,11 @@ export async function waitForBinanceWeightHeadroom(): Promise<void> {
       `sleeping ${ms}ms for reset`
     );
     await new Promise(r => setTimeout(r, ms));
+    // Open a fresh window on wake: zero the weight AND advance the reset marker
+    // together, so getBinanceWeightUtilization() reports a real 0 for a valid
+    // window rather than 0 because the window looks expired.
     _usedWeight = 0;
+    _weightResetAt = Date.now() + 60_000;
   }
 }
 

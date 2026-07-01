@@ -83,7 +83,7 @@ https://www.binance.com/bapi/futures/v1/public/future/smart-money/signal/overvie
 └─────────────────┘  │                                       │  • Node import 导入      │
 ┌─────────────────┐  │ 写入快照                              │      import { … }        │
 │ top-trader-tick │──┤                                       │  • MCP server            │
-└─────────────────┘  │                                       │      (stdio，5 个工具)   │
+└─────────────────┘  │                                       │      (stdio，6 个工具)   │
 ┌─────────────────┐  │                                       │  • panel HTML 看板卡片   │
 │ oi-tick         │──┘                                       │      (render_panel)      │
 └─────────────────┘  │                                       └──────────────────────────┘
@@ -105,7 +105,7 @@ https://www.binance.com/bapi/futures/v1/public/future/smart-money/signal/overvie
   文件（两/三张表，30 天保留），由一个服务端渲染的 Express 看板 + JSON API
   提供（无前端框架）。
 - **轨道 B**（实时，**无 DB**）：同一份库内核被直接消费 —— 当 **Node import**
-  导入、走 **MCP server**（stdio，5 个工具）、或通过 **panel HTML**
+  导入、走 **MCP server**（stdio，6 个工具）、或通过 **panel HTML**
   （`render_panel`）。每次调用都实时直连 Binance，**无需 cron、无需数据库**。
 - **共享内核**：两条轨道都调用 `getSmartMoneyOverview` /
   `getTopTraderSnapshot` / `getOpenInterest`，因此同一套 7 层限频防护保护每条路径。
@@ -248,7 +248,7 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 ```
 
 `npx` 会自动下载包、运行 `binance-smart-money-oi-monitor` 这个 bin（即 MCP server），
-你的 AI 就拿到下面 5 个工具。该 server 是纯 stdio JSON-RPC，运行时**不加载任何原生模块**
+你的 AI 就拿到下面 6 个工具。该 server 是纯 stdio JSON-RPC，运行时**不加载任何原生模块**
 （不拉 `better-sqlite3`/`express`）。
 
 <details>
@@ -278,6 +278,7 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 | `get_open_interest` | `symbol` | 全市场 OI（USD + 币数）+ 5m/15m/1h/4h 变化 |
 | `get_full_picture` | `symbol`, `period?` | 三者合一 + 聪明钱占 OI 比例 —— "X 现在什么仓位"的一键调用 |
 | `render_panel` | `symbol`, `includeHtml?` | 可分享的深色 HTML 聪明钱卡片（Smart Signal 样式）—— 返回 `{ summary, html }`；传 `includeHtml:false` 只要 summary |
+| `render_push` | `symbol` | Telegram `巨鲸总览` 推送卡片，`parse_mode:HTML` 消息体 —— 可直接发到聊天（相对 `render_panel` 的完整 HTML 页面）|
 
 `get_full_picture ETH` 返回示例：
 
