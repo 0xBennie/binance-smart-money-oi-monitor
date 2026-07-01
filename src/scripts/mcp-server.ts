@@ -42,7 +42,7 @@ import { getOpenInterest } from '../binance-open-interest.js';
 import { buildPanel, renderPanelHtml } from '../panel.js';
 import { normalizeSymbol } from '../symbol.js';
 
-const SERVER_INFO = { name: 'binance-smart-money', version: '1.0.0' };
+const SERVER_INFO = { name: 'binance-smart-money', version: '1.3.0' };
 const PROTOCOL_VERSION = '2025-06-18';
 const TT_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
 
