@@ -20,7 +20,7 @@ jobs:
       - run: npm test
 
   python:
-    name: altmonitor syntax check
+    name: altmonitor syntax check + tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,3 +29,6 @@ jobs:
           python-version: "3.12"
       - name: Byte-compile (syntax check, no network)
         run: python -m compileall -q altmonitor
+      - name: Unit tests (stdlib only, no network / no deps)
+        working-directory: altmonitor
+        run: python -m unittest test_env_io test_ssh_util test_tg_probe test_links
