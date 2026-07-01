@@ -1,6 +1,6 @@
 {
   "name": "binance-smart-money-oi-monitor",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Binance Smart Money (Smart Signal) + Open Interest anomaly monitor — 17 whale fields the public fapi can't give you, an MCP server for any terminal AI, 7-layer 418 protection. A Bennie Strategy project.",
   "license": "MIT",
   "author": "Bennie Strategy (0xBenniee) <https://x.com/0xBenniee>",
@@ -50,6 +50,7 @@
     "top-trader:tick": "tsx src/scripts/top-trader-tick.ts",
     "oi:tick": "tsx src/scripts/oi-tick.ts",
     "dashboard": "tsx src/scripts/smart-money-dashboard.ts",
+    "panel": "tsx src/scripts/panel.ts",
     "mcp": "tsx src/scripts/mcp-server.ts",
     "demo": "tsx src/scripts/push-demo.ts",
     "typecheck": "tsc --noEmit",

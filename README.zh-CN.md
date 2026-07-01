@@ -260,6 +260,24 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 }
 ```
 
+### 生成可分享的看板
+
+把任意币的鲸鱼仓位做成一张**自包含深色 HTML 卡片**（币安 Smart Signal 那种样式）—— 截图发推，或把 HTML 串嵌进自己的网站。
+
+```bash
+npm run panel BEAT          # 生成 beatusdt-panel.html，浏览器打开截图即可
+```
+
+三种方式，同一张卡：
+
+```ts
+import { buildPanel, renderPanelHtml } from 'binance-smart-money-oi-monitor';
+const html = renderPanelHtml((await buildPanel('BEAT'))!);   // 当库用
+```
+
+- MCP 工具 `render_panel`(symbol) → 返回 `{ summary, html }`，让你的 AI 当场生成看板。
+- 卡片零依赖（无外链），到哪都能渲染、截图干净，底部自带署名水印。
+
 ---
 
 ## 池规模 & cron 节奏

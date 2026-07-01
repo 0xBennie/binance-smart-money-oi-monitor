@@ -306,6 +306,25 @@ Example `get_full_picture ETH` result:
 }
 ```
 
+### Generate a shareable panel
+
+Turn any symbol's whale positioning into a self-contained dark HTML card (the
+binance.com Smart Signal look) — screenshot it for a post, or embed the string.
+
+```bash
+npm run panel BEAT          # writes beatusdt-panel.html; open it & screenshot
+```
+
+Three ways, same card:
+
+```ts
+import { buildPanel, renderPanelHtml } from 'binance-smart-money-oi-monitor';
+const html = renderPanelHtml((await buildPanel('BEAT'))!);   // as a library
+```
+
+- MCP tool `render_panel` (symbol) → returns `{ summary, html }`, so your AI can generate a panel on demand.
+- The card is dependency-free (no external assets), so it renders anywhere and screenshots cleanly.
+
 ---
 
 ## Pool sizing & cron cadence
