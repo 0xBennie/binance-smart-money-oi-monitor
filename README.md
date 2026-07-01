@@ -90,7 +90,7 @@ shorts entered too late and are about to get squeezed.
 └─────────────────┘  │                                       │  • Node import           │
 ┌─────────────────┐  │ writes snapshots                      │      import { … }        │
 │ top-trader-tick │──┤                                       │  • MCP server            │
-└─────────────────┘  │                                       │      (stdio, 5 tools)    │
+└─────────────────┘  │                                       │      (stdio, 6 tools)    │
 ┌─────────────────┐  │                                       │  • panel HTML            │
 │ oi-tick         │──┘                                       │      (render_panel)      │
 └─────────────────┘  │                                       └──────────────────────────┘
@@ -113,7 +113,7 @@ shorts entered too late and are about to get squeezed.
   one sqlite file (two/three tables, 30-day retention), served by one
   server-side-rendered Express dashboard + JSON API (no JS framework).
 - **Track B** (live, **no DB**): the same library core is consumed directly —
-  as a **Node import**, over the **MCP server** (stdio, 5 tools), or via the
+  as a **Node import**, over the **MCP server** (stdio, 6 tools), or via the
   **panel HTML** (`render_panel`). Each call hits Binance live and needs **no
   cron and no database**.
 - **Shared core**: both tracks call `getSmartMoneyOverview` /
@@ -283,7 +283,7 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 ```
 
 `npx` downloads the package, runs the `binance-smart-money-oi-monitor` bin (the MCP
-server), and your AI gets the five tools below. The server is pure stdio JSON-RPC
+server), and your AI gets the six tools below. The server is pure stdio JSON-RPC
 and pulls in no native modules (no `better-sqlite3`/`express` at runtime).
 
 <details>
@@ -313,6 +313,7 @@ or just `npm run mcp` to launch the stdio server in the foreground.
 | `get_open_interest` | `symbol` | Total OI (USD + coins) + 5m/15m/1h/4h velocity |
 | `get_full_picture` | `symbol`, `period?` | All three combined + Smart Money's share of total OI — the one-shot "what's the positioning on X" call |
 | `render_panel` | `symbol`, `includeHtml?` | Shareable dark-HTML Smart Money card (Smart Signal look) — returns `{ summary, html }`; pass `includeHtml:false` for summary-only |
+| `render_push` | `symbol` | Telegram `巨鲸总览` card as a `parse_mode:HTML` message body — the compact card to send straight to a chat (vs `render_panel`'s full standalone page) |
 
 Example `get_full_picture ETH` result:
 

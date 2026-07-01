@@ -62,3 +62,6 @@ export {
   type PanelData,
   type PanelSide,
 } from './panel.js';
+
+// Fetch + render the Telegram "巨鲸总览" push card (parse_mode: HTML) in one call.
+export { buildPush } from './push.js';
