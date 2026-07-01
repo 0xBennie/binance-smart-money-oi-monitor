@@ -10,6 +10,8 @@
 
 > A **[Bennie Strategy](https://x.com/0xBenniee)** project · npm package `binance-smart-money-oi-monitor` · contact: [X/Twitter @0xBenniee](https://x.com/0xBenniee) · [Telegram @OxBennie](https://t.me/OxBennie)
 
+![Binance Smart Money panel — per-side whale positions, funding, self-contained shareable card](https://raw.githubusercontent.com/0xBennie/binance-smart-money-oi-monitor/main/docs/panel-preview.png)
+
 Production-grade scraper for **Binance Smart Signal** (the "Smart Money" tab on
 binance.com Futures) — pulls the full 17-field whale overview that the public
 `fapi` API does **not** expose, with a 7-layer defense against `418 / 429 / 403`
@@ -264,6 +266,8 @@ cron or local database needed. It works with any MCP-compatible client:
 
 **Register it with one line — no clone, no build.** Point
 your AI client at `npx -y binance-smart-money-oi-monitor`:
+
+> **Updating:** `npx` caches the package — to move to the latest version, re-add it (`claude mcp remove binance-smart-money && claude mcp add …`) or run `npx clear-npx-cache`, then restart your client.
 
 ```json
 {

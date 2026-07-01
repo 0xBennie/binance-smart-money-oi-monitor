@@ -14,13 +14,25 @@ import { buildPanel, renderPanelHtml } from './panel.js';
 import { buildPush } from './push.js';
 import { getFundingInfo, getFundingIntervalHours, fundingCountdownString } from './binance-ticker.js';
 import { fundingCost } from './funding.js';
+import { isBinanceApiBlocked } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.6.2' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.7.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // Auto-attached to every analysis result. This tool reports on-chain/exchange data
 // and structure — it deliberately does NOT emit buy/sell or directional signals.
 export const DISCLAIMER = '仅供数据分析,不构成投资建议。Data & analysis only — not financial advice.';
+
+// Distinguish "Binance is unreachable / rate-limited right now" from "this symbol
+// isn't supported" — otherwise both look like a bare "no data" to the caller.
+function noData(fields: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...fields,
+    error: isBinanceApiBlocked()
+      ? 'Binance is temporarily rate-limited/blocked — retry shortly, or run from a region where Binance is reachable.'
+      : 'no data — the symbol may be unsupported (not a Binance USDT-perpetual).',
+  };
+}
 const TT_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
 
 function hoursAgo(ms: number | undefined): number | null {
@@ -34,7 +46,7 @@ async function toolGetSmartMoney(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required, e.g. "BTC" or "BTCUSDT"' };
   const sm = await getSmartMoneyOverview(symbol);
-  if (!sm) return { symbol, error: 'no data (symbol unsupported or Binance temporarily blocked)' };
+  if (!sm) return noData({ symbol });
 
   return {
     symbol,
@@ -53,7 +65,7 @@ async function toolGetTopTrader(args: any) {
   if (!symbol) return { error: 'symbol is required' };
   const period = (args.period as TopTraderPeriod) || '5m';
   const tt = await getTopTraderSnapshot(symbol, period);
-  if (!tt) return { symbol, period, error: 'no data' };
+  if (!tt) return noData({ symbol, period });
   return {
     symbol,
     period,
@@ -69,7 +81,7 @@ async function toolGetOpenInterest(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
   const oi = await getOpenInterest(symbol);
-  if (!oi) return { symbol, error: 'no data' };
+  if (!oi) return noData({ symbol });
   return {
     symbol,
     oiNowUsd: Math.round(oi.oiNowUsd),
@@ -91,12 +103,13 @@ async function toolGetFullPicture(args: any) {
     getFundingInfo(symbol),
     getFundingIntervalHours(symbol),
   ]);
-  if (!sm && !tt && !oi) return { symbol, error: 'no data from any source' };
+  if (!sm && !tt && !oi) return noData({ symbol });
 
   const share = sm && oi ? smartMoneyShareOfOI(sm, oi.oiNowUsd) : null;
   const fc = funding ? fundingCost(funding.lastFundingRate, intervalHours, 10_000) : null;
   return {
     symbol,
+    price: funding ? funding.markPrice : null,
     smartMoney: sm && {
       longShortRatio: sm.longShortRatio,
       totalNotionalUsd: Math.round(smartMoneyNotionalUsd(sm)),
@@ -125,10 +138,11 @@ async function toolGetFunding(args: any) {
     getFundingInfo(symbol),
     getFundingIntervalHours(symbol),
   ]);
-  if (!funding) return { symbol, error: 'no data' };
+  if (!funding) return noData({ symbol });
   const cost = fundingCost(funding.lastFundingRate, intervalHours, notionalUsd);
   return {
     symbol,
+    price: funding.markPrice,
     ...cost,
     nextFundingCountdown: fundingCountdownString(funding.nextFundingTime),
     note: `Rate is per ${cost.intervalHours}h settlement; ${cost.longPays ? 'LONGS pay shorts' : 'SHORTS pay longs'}. `
@@ -141,7 +155,7 @@ async function toolRenderPanel(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
   const data = await buildPanel(symbol);
-  if (!data) return { symbol, error: 'no data' };
+  if (!data) return noData({ symbol });
   // Rich enough to reason about without parsing the html blob.
   const summary = {
     price: data.price,
@@ -169,7 +183,7 @@ async function toolRenderPush(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
   const html = await buildPush(symbol);
-  if (!html) return { symbol, error: 'no data' };
+  if (!html) return noData({ symbol });
   return {
     symbol,
     html,
