@@ -50,7 +50,7 @@ https://www.binance.com/bapi/futures/v1/public/future/smart-money/signal/overvie
 | **`longProfitWhales` / `shortProfitWhales`**（盈利鲸鱼数） | ❌ | ✅ |
 | **聪明钱占全市场 OI 的比例**（衍生计算） | ❌ | ✅ |
 
-那 4 个 ★ 字段才是 Smart Signal 真正有用的地方 —— 它们不只告诉你*哪边持仓更多*，
+**加粗**的那几行才是 Smart Signal 真正有用的地方 —— 它们不只告诉你*哪边持仓更多*，
 而是*此刻哪边真在赚钱*、均价多少。公开 `fapi` 给不了这些。
 
 ### 解读示例
@@ -180,14 +180,22 @@ const [sm, tt, oi] = await Promise.all([
 if (sm && oi) {
   console.log(`${sm.longWhales} 个多头鲸鱼 @ 均价 ${sm.longWhalesAvgEntryPrice}`);
   console.log(`${sm.longProfitTraders}/${sm.longTraders} 多头在盈利`);
-  // 聪明钱 USD 名义敞口，由 数量 × 均价 推导（不要用单位不一致的 totalPositions）
-  console.log(`聪明钱名义敞口: $${(smartMoneyNotionalUsd(sm) / 1e6).toFixed(2)}M`);
-  console.log(`占全市场 OI: ${(smartMoneyShareOfOI(sm, oi.oiNowUsd)! * 100).toFixed(1)}%`);
+  console.log(`全市场 OI: $${(oi.oiNowUsd / 1e6).toFixed(2)}M，4h 变化 ${oi.oiChg4h.toFixed(2)}%`);
+
+  // 聪明钱 USD 名义敞口，由 数量 × 均价 推导（不要用单位不一致的 totalPositions）。
+  const smUsd = smartMoneyNotionalUsd(sm);
+  const share = smartMoneyShareOfOI(sm, oi.oiNowUsd);
+  console.log(`聪明钱名义敞口: $${(smUsd / 1e6).toFixed(2)}M`);
+  console.log(`占全市场 OI: ${share == null ? 'n/a' : (share * 100).toFixed(1) + '%'}`);
 }
 ```
 
 > **为什么要 helper？** 币安未公开的 `totalPositions` 字段单位跨币种不一致（有时是币本位、有时是 USD）。
-> `smartMoneyNotionalUsd(sm)` 用单位已知的字段（`数量 × 均价`）确定性地算出 USD 名义敞口。
+> `smartMoneyNotionalUsd(sm)` 用单位已知的字段（`数量 × 均价`）确定性地算出 USD 名义敞口。不要拿 `totalPositions` 去除任何东西，用这个 helper。
+
+本库还一并导出了所有限频 helper（`isBinanceApiBlocked`、`preflightBinanceFapi`、
+`waitForBinanceWeightHeadroom`），你可以把同一套熔断器接进自己的其他 Binance 调用，
+让多个模块共用一份权重预算。
 
 直接从 GitHub 安装：
 
@@ -300,8 +308,8 @@ import { buildPanel, renderPanelHtml } from 'binance-smart-money-oi-monitor';
 const html = renderPanelHtml((await buildPanel('BEAT'))!);   // 当库用
 ```
 
-- MCP 工具 `render_panel`(symbol) → 返回 `{ summary, html }`，让你的 AI 当场生成看板。
-- 卡片零依赖（无外链），到哪都能渲染、截图干净，底部自带署名水印。
+第三种方式是 MCP 工具 `render_panel`（见上方工具表），让你的 AI 当场生成看板。
+无论用哪种方式，卡片都零依赖（无外链），到哪都能渲染、截图干净。
 
 ---
 
@@ -447,8 +455,6 @@ module.exports = {
 ```bash
 cd altmonitor && pip install -r requirements.txt && python setup.py
 ```
-
-贴 token → 给 bot 发消息 → 自动抓 chat_id → 写好 `.env` → 可选启动。
 
 **一条命令部署到自己的 VPS**（先试 SSH key 再用密码，装 Docker，同步代码 + `.env`，运行，上线后 Telegram 通知你）：
 

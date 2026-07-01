@@ -55,7 +55,7 @@ burst can cost you a 4-hour `Retry-After`. This repo solves that.
 | **`longProfitWhales` / `shortProfitWhales`** | ❌ | ✅ |
 | **Smart Money's share of total market OI** (derived) | ❌ | ✅ |
 
-The four ★ fields are what makes Smart Signal useful — they tell you not just
+The **bold** rows are what makes Smart Signal useful — they tell you not just
 *which side has more positions*, but *which side is actually making money right
 now*, and at what average entry. Public `fapi` can't tell you any of that.
 
@@ -344,8 +344,10 @@ import { buildPanel, renderPanelHtml } from 'binance-smart-money-oi-monitor';
 const html = renderPanelHtml((await buildPanel('BEAT'))!);   // as a library
 ```
 
-- MCP tool `render_panel` (symbol) → returns `{ summary, html }`, so your AI can generate a panel on demand.
-- The card is dependency-free (no external assets), so it renders anywhere and screenshots cleanly.
+The third way is the MCP tool `render_panel` (see the tools table above), so
+your AI can generate a panel on demand. However you build it, the card is
+dependency-free (no external assets), so it renders anywhere and screenshots
+cleanly.
 
 ---
 
