@@ -20,3 +20,6 @@ altmonitor/.env
 altmonitor/state.json
 altmonitor/alerts.db
 altmonitor/alerts.db-*
+
+# internal skill-generated specs (not for the public repo)
+docs/superpowers/

@@ -40,15 +40,11 @@ import {
 import { getTopTraderSnapshot, type TopTraderPeriod } from '../binance-top-trader.js';
 import { getOpenInterest } from '../binance-open-interest.js';
 import { buildPanel, renderPanelHtml } from '../panel.js';
+import { normalizeSymbol } from '../symbol.js';
 
 const SERVER_INFO = { name: 'binance-smart-money', version: '1.0.0' };
 const PROTOCOL_VERSION = '2025-06-18';
-
-function normalizeSymbol(raw: unknown): string {
-  const s = String(raw ?? '').trim().toUpperCase();
-  if (!s) return '';
-  return s.endsWith('USDT') ? s : `${s}USDT`;
-}
+const TT_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
 
 function hoursAgo(ms: number | undefined): number | null {
   if (!ms) return null;
@@ -150,17 +146,27 @@ async function toolRenderPanel(args: any) {
   if (!symbol) return { error: 'symbol is required' };
   const data = await buildPanel(symbol);
   if (!data) return { symbol, error: 'no data' };
-  return {
-    symbol,
-    summary: {
-      totalNotionalUsd: Math.round(data.totalNotionalUsd),
-      longProfitPct: Math.round(data.long.profitPct * 100),
-      shortProfitPct: Math.round(data.short.profitPct * 100),
-      smShareOfOI: data.smShareOfOI == null ? null : Math.round(data.smShareOfOI * 1000) / 1000,
-    },
-    note: 'Write `html` to a .html file and open it in a browser (or screenshot it).',
-    html: renderPanelHtml(data),
+  // Rich enough to reason about without parsing the html blob.
+  const summary = {
+    price: data.price,
+    totalNotionalUsd: Math.round(data.totalNotionalUsd),
+    totalTraders: data.totalTraders,
+    longShortNotionalRatio: data.longShortNotionalRatio,
+    long: { avgEntry: data.long.avgEntry, profitPct: Math.round(data.long.profitPct * 100), whales: data.long.whales },
+    short: { avgEntry: data.short.avgEntry, profitPct: Math.round(data.short.profitPct * 100), whales: data.short.whales },
+    topPositionLsr: data.topPositionLsr,
+    takerBsr: data.takerBsr,
+    smShareOfOI: data.smShareOfOI == null ? null : Math.round(data.smShareOfOI * 1000) / 1000,
+    oiNowUsd: data.oiNowUsd == null ? null : Math.round(data.oiNowUsd),
   };
+  // includeHtml defaults true; pass false to save context when you only need the numbers.
+  const out: any = {
+    symbol,
+    summary,
+    note: 'summary has the numbers to talk about; html (when included) is a complete standalone document — save it to a .html file and screenshot it if your client can write files.',
+  };
+  if (args.includeHtml !== false) out.html = renderPanelHtml(data);
+  return out;
 }
 
 const TOOLS: Record<string, { fn: (args: any) => Promise<any>; description: string; properties: any; required?: string[] }> = {
@@ -180,7 +186,7 @@ const TOOLS: Record<string, { fn: (args: any) => Promise<any>; description: stri
       "Complements get_smart_money with shorter-horizon flow.",
     properties: {
       symbol: { type: 'string', description: 'e.g. "ETH" or "ETHUSDT"' },
-      period: { type: 'string', description: 'one of 5m/15m/30m/1h/2h/4h/6h/12h/1d (default 5m)' },
+      period: { type: 'string', enum: TT_PERIODS, description: 'top-trader window (default 5m)' },
     },
     required: ['symbol'],
   },
@@ -197,17 +203,21 @@ const TOOLS: Record<string, { fn: (args: any) => Promise<any>; description: stri
       "share of total OI. The single most useful call for 'what's the positioning on X'.",
     properties: {
       symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' },
-      period: { type: 'string', description: 'top-trader period (default 5m)' },
+      period: { type: 'string', enum: TT_PERIODS, description: 'top-trader period (default 5m)' },
     },
     required: ['symbol'],
   },
   render_panel: {
     fn: toolRenderPanel,
     description:
-      "Render a shareable Smart Money overview panel for a symbol as a self-contained dark HTML page " +
-      "(the binance.com Smart Signal card look). Returns { summary, html } — save the html to a .html " +
-      "file and open/screenshot it. Great for posting a coin's whale positioning to social.",
-    properties: { symbol: { type: 'string', description: 'e.g. "BEAT" or "BEATUSDT"' } },
+      "Render a shareable Smart Money overview panel for a symbol as a self-contained dark HTML card " +
+      "(the binance.com Smart Signal look). Returns { summary, html }: summary has the key numbers " +
+      "(price, avg entries, profit %, LSR/Taker, OI share) to talk about; html is a standalone " +
+      "document to save/screenshot for social. Pass includeHtml:false for summary-only (saves context).",
+    properties: {
+      symbol: { type: 'string', description: 'e.g. "BEAT" or "BEATUSDT"' },
+      includeHtml: { type: 'boolean', description: 'include the full HTML document (default true)' },
+    },
     required: ['symbol'],
   },
 };
@@ -238,7 +248,10 @@ async function handle(req: any): Promise<any | null> {
       if (!tool) return err(-32601, `Unknown tool: ${name}`);
       try {
         const result = await tool.fn(req.params?.arguments ?? {});
-        return ok({ content: [{ type: 'text', text: JSON.stringify(result) }] });
+        // Surface soft failures ({ error: ... }) as MCP tool errors so clients
+        // don't mistake "no data" for a successful answer.
+        const isError = !!(result && typeof result === 'object' && 'error' in result);
+        return ok({ content: [{ type: 'text', text: JSON.stringify(result) }], isError });
       } catch (e: any) {
         return err(-32000, e?.message ?? String(e));
       }

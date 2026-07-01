@@ -15,6 +15,10 @@
 
 数据全部来自币安**免费公开接口**(WebSocket K线 + REST OI/多空比),无需 API key、不烧任何额度。
 
+## 配套工具 / Companion
+
+本工具是 [binance-smart-money-oi-monitor](https://github.com/0xBennie/binance-smart-money-oi-monitor) 仓库 Python 那一半。TypeScript 那一半给你更深的定位数据:[17 字段 Smart Money 抓取器](https://github.com/0xBennie/binance-smart-money-oi-monitor#what-you-get-vs-public-fapi)(鲸鱼均价 + 盈利大户数)、[MCP server](https://github.com/0xBennie/binance-smart-money-oi-monitor#mcp-server-use-from-any-terminal-ai)(`npx -y binance-smart-money-oi-monitor`)、以及[可分享的看板](https://github.com/0xBennie/binance-smart-money-oi-monitor#generate-a-shareable-panel)。altmonitor 告诉你某个币**何时**异动,把它丢进那半就知道**是谁**在建仓。
+
 **特性**
 - 全市场 USDT 永续(~530 个),三类告警:**价格 ±3% / OI 1m·5m 异动 / 爆量**
 - 价格告警附带 **振幅 + 多空比(LSR)** + 价 × 仓四象限
@@ -163,5 +167,7 @@ python deploy.py --down                        # 停止
 
 **Bennie Strategy** 出品(本工具是 [binance-smart-money-oi-monitor](../README.md) 仓库的 Python 伴随组件)。
 
-- 🐦 X / 推特:[@0xBenniee](https://x.com/0xBenniee)
-- 💬 Telegram:[@OxBennie](https://t.me/OxBennie)
+- 🐦 X / 推特:[@0xBenniee](https://x.com/0xBenniee)（0x 是数字零加 x，双写 e）
+- 💬 Telegram:[@OxBennie](https://t.me/OxBennie)（Ox 是大写字母 O）
+
+两个 handle 都是对的，不是打错。

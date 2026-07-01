@@ -36,6 +36,9 @@ export {
   type FormatterInput,
 } from './format.js';
 
+export { fmtUsd, fmtPct, fmtChg, fmtPrice } from './format-num.js';
+export { normalizeSymbol } from './symbol.js';
+
 export {
   isBinanceApiBlocked,
   markBinanceApiBlocked,

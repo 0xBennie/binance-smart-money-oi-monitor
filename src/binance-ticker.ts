@@ -57,10 +57,14 @@ export async function getTicker24h(symbol: string): Promise<TickerInfo | null> {
     updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
     const d = resp.data;
     if (!d?.symbol) return cached?.snap ?? null;
+    const lastPrice = parseFloat(d.lastPrice);
+    // Drop a malformed payload rather than caching/returning a NaN price
+    // (a NaN price silently fabricates PNL/state downstream, e.g. in the panel).
+    if (!Number.isFinite(lastPrice)) return cached?.snap ?? null;
     const snap: TickerInfo = {
       symbol: d.symbol,
       ts: Date.now(),
-      lastPrice: parseFloat(d.lastPrice),
+      lastPrice,
       priceChangePct24h: parseFloat(d.priceChangePercent),
       quoteVolume24hUsd: parseFloat(d.quoteVolume),
     };
