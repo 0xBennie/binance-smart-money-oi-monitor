@@ -38,6 +38,8 @@ const FAPI = 'https://fapi.binance.com';
 const CACHE_TTL_MS = 5 * 60_000;
 const REQ_TIMEOUT_MS = 5_000;
 
+import { capSet } from './cache.js';
+
 const cache = new Map<string, CachedSnap>();
 const cacheKey = (s: string, p: TopTraderPeriod) => `${s}|${p}`;
 
@@ -99,7 +101,7 @@ export async function getTopTraderSnapshot(
     return cached?.snap ?? null;
   }
 
-  cache.set(key, { snap, fetchedAt: Date.now() });
+  capSet(cache, key, { snap, fetchedAt: Date.now() });
   return snap;
 }
 

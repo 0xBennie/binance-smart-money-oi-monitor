@@ -40,6 +40,8 @@ export interface FundingInfo {
 
 interface CachedTicker { snap: TickerInfo; fetchedAt: number; }
 interface CachedFunding { snap: FundingInfo; fetchedAt: number; }
+import { capSet } from './cache.js';
+
 const tickerCache = new Map<string, CachedTicker>();
 const fundingCache = new Map<string, CachedFunding>();
 
@@ -68,7 +70,7 @@ export async function getTicker24h(symbol: string): Promise<TickerInfo | null> {
       priceChangePct24h: parseFloat(d.priceChangePercent),
       quoteVolume24hUsd: parseFloat(d.quoteVolume),
     };
-    tickerCache.set(symbol, { snap, fetchedAt: Date.now() });
+    capSet(tickerCache, symbol, { snap, fetchedAt: Date.now() });
     return snap;
   } catch (error) {
     const { sev, retryAfterSec } = detectBinanceBlockDetails(error);
@@ -98,7 +100,7 @@ export async function getFundingInfo(symbol: string): Promise<FundingInfo | null
       lastFundingRate: parseFloat(d.lastFundingRate),
       nextFundingTime: Number(d.nextFundingTime),
     };
-    fundingCache.set(symbol, { snap, fetchedAt: Date.now() });
+    capSet(fundingCache, symbol, { snap, fetchedAt: Date.now() });
     return snap;
   } catch (error) {
     const { sev, retryAfterSec } = detectBinanceBlockDetails(error);

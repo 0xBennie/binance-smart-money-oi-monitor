@@ -18,10 +18,12 @@ export function fmtPct(v: number | null | undefined): string {
   return v == null || !Number.isFinite(v) ? '—' : `${(v * 100).toFixed(2)}%`;
 }
 
-/** A signed change fraction: 0.05 → '+5.00%', -0.0512 → '-5.12%'. null/NaN → '—'. */
+/** A signed change ALREADY expressed in percent: 4.05 → '+4.05%', -5.12 → '-5.12%'.
+ * null/NaN → '—'. (Change fields here — oiChg*, priceChangePct — are already percents,
+ * unlike the 0..1 fractions that go through fmtPct.) */
 export function fmtChg(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return '—';
-  return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%`;
+  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
 }
 
 /** Price with thousands grouping for large values, trimmed decimals for mid,

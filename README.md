@@ -75,33 +75,50 @@ shorts entered too late and are about to get squeezed.
 ## Architecture
 
 ```
-┌─────────────────┐         ┌──────────────────────────────┐
-│ smart-money-tick│ cron 60m├──► binance bapi smart-money  │
-└────────┬────────┘         └──────────────────────────────┘
-         │                                │
-         │ writes ob_smart_money_snapshots│
-         ▼                                ▼
+                    ┌──────────────────────────────────────────────────────┐
+                    │                   library core                        │
+                    │  getSmartMoneyOverview / getTopTraderSnapshot /       │
+                    │  getOpenInterest — live Binance (bapi + fapi/data),   │
+                    │  7-layer rate-limit guard                             │
+                    └───────────────┬───────────────────────┬───────────────┘
+                                    │                        │
+        ┌───────────────────────────┘                        └────────────────────────┐
+        │  TRACK A — cron → db → dashboard                    │  TRACK B — live, no DB   │
+        ▼                                                     ▼  (hits Binance live,     │
+┌─────────────────┐  cron 60m                                    no cron / no sqlite)    │
+│ smart-money-tick│──┐                                       ┌──────────────────────────┐
+└─────────────────┘  │                                       │  • Node import           │
+┌─────────────────┐  │ writes snapshots                      │      import { … }        │
+│ top-trader-tick │──┤                                       │  • MCP server            │
+└─────────────────┘  │                                       │      (stdio, 5 tools)    │
+┌─────────────────┐  │                                       │  • panel HTML            │
+│ oi-tick         │──┘                                       │      (render_panel)      │
+└─────────────────┘  │                                       └──────────────────────────┘
+                     ▼
 ┌─────────────────────────────────────────────┐
 │           sqlite (data/snapshots.db)         │
 │   ob_smart_money_snapshots (21 columns)      │
 │   ob_top_trader_snapshots  (12 columns)      │
+│   ob_oi_snapshots                            │
 └────────────────────┬─────────────────────────┘
                      │ read-only
                      ▼
-            ┌──────────────────┐
+            ┌───────────────────┐
             │ Express dashboard │   http://your-host:3001/
             │ + JSON API        │
-            └──────────────────┘
-
-┌─────────────────┐         ┌──────────────────────────────┐
-│ top-trader-tick │ cron 30m├──► binance fapi/futures/data │
-└─────────────────┘         └──────────────────────────────┘
+            └───────────────────┘
 ```
 
-- **One sqlite file**, two tables, 30-day retention
-- **One Express dashboard** with server-side rendering (no JS framework)
-- **Two cron entry points** (smart-money 60min, top-trader 30min) — staggered
-- **Library mode**: `import { getSmartMoneyOverview } from 'binance-smart-money-oi-monitor'`
+- **Track A** (`cron → sqlite → Express`): scheduled ticks persist snapshots to
+  one sqlite file (two/three tables, 30-day retention), served by one
+  server-side-rendered Express dashboard + JSON API (no JS framework).
+- **Track B** (live, **no DB**): the same library core is consumed directly —
+  as a **Node import**, over the **MCP server** (stdio, 5 tools), or via the
+  **panel HTML** (`render_panel`). Each call hits Binance live and needs **no
+  cron and no database**.
+- **Shared core**: both tracks call `getSmartMoneyOverview` /
+  `getTopTraderSnapshot` / `getOpenInterest`, so the same 7-layer rate-limit
+  guard protects every path.
 
 ---
 
@@ -310,6 +327,8 @@ Example `get_full_picture ETH` result:
 ```
 
 ### Generate a shareable panel
+
+![Shareable Smart Money panel — BEAT example](https://raw.githubusercontent.com/0xBennie/binance-smart-money-oi-monitor/main/docs/panel-preview.png)
 
 Turn any symbol's whale positioning into a self-contained dark HTML card (the
 binance.com Smart Signal look) — screenshot it for a post, or embed the string.

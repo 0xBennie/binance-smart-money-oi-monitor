@@ -35,6 +35,8 @@ export interface OpenInterestSnapshot {
   oiChg4h: number | null;      // 4h = 47 × 5min bars back
 }
 
+import { capSet } from './cache.js';
+
 interface CachedOI { snap: OpenInterestSnapshot; fetchedAt: number; }
 const cache = new Map<string, CachedOI>();
 
@@ -97,7 +99,7 @@ export async function getOpenInterest(symbol: string): Promise<OpenInterestSnaps
       oiChg1h: pctChange(oiNowUsd, refUsd(12)),
       oiChg4h: pctChange(oiNowUsd, refUsd(47)),
     };
-    cache.set(symbol, { snap, fetchedAt: Date.now() });
+    capSet(cache, symbol, { snap, fetchedAt: Date.now() });
     return snap;
   } catch (error) {
     const { sev, retryAfterSec } = detectBinanceBlockDetails(error);

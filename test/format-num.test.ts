@@ -18,10 +18,12 @@ test('fmtPct guards non-finite', () => {
   assert.equal(fmtPct(NaN), '—');
 });
 
-test('fmtChg is signed', () => {
-  assert.equal(fmtChg(0.05), '+5.00%');
-  assert.equal(fmtChg(-0.0512), '-5.12%');
+test('fmtChg formats an already-percent change, signed (no extra ×100)', () => {
+  assert.equal(fmtChg(4.05), '+4.05%');   // oiChg values are already percents
+  assert.equal(fmtChg(-5.12), '-5.12%');
+  assert.equal(fmtChg(0), '+0.00%');
   assert.equal(fmtChg(null), '—');
+  assert.equal(fmtChg(NaN), '—');
 });
 
 test('fmtPrice groups large, trims small, guards <=0', () => {
