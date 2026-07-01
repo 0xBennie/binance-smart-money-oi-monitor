@@ -150,6 +150,7 @@ python deploy.py --down                        # 停止
 | `TG_MIN_SEND_INTERVAL` | 3.2 | 两条消息最小间隔(防撞 TG 限速) |
 | `ALLOWED_CHAT_IDS` | (空) | 额外允许发命令的 chat id,逗号分隔 |
 | `LSR_PERIOD` | 5m | 多空比粒度(币安最小 5m) |
+| `SMART_MONEY_LINK` | true | 每条告警附带该币的币安"聪明钱"(鲸鱼持仓)链接——从"何时异动"一键跳到"是谁在建仓" |
 | `HISTORY_ENABLED` | true | 是否存 SQLite 历史 |
 | `DB_FILE` | alerts.db | 历史数据库文件 |
 

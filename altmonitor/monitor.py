@@ -18,6 +18,7 @@ from notifier import Telegram
 from oi_tracker import OITracker
 from state import RuntimeSettings
 from symbols import base_asset, fetch_usdt_perpetuals
+from links import smart_money_link
 from volume import VolumeTracker
 
 logging.basicConfig(
@@ -67,6 +68,8 @@ def build_message(a: Alert, quad: str) -> str:
     if a.lsr is not None:
         lines.append(f"⚖️ 多空比: {a.lsr:.2f} ({'偏多' if a.lsr >= 1 else '偏空'})")
     lines.append(f"🕐 {now}")
+    if config.SMART_MONEY_LINK:
+        lines.append(f"🐋 聪明钱: {smart_money_link(a.symbol)}")
     return "\n".join(lines)
 
 
@@ -91,18 +94,23 @@ def build_oi_msg(symbol: str, window: str, pct: float, price: float | None) -> s
     if price is not None:
         lines.append(f"💲 价格: {_fmt_price(price)}")
     lines.append(f"🕐 {now}")
+    if config.SMART_MONEY_LINK:
+        lines.append(f"🐋 聪明钱: {smart_money_link(symbol)}")
     return "\n".join(lines)
 
 
 def build_vol_msg(symbol: str, price: float, quote_vol: float, ratio: float) -> str:
     now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    return "\n".join([
+    lines = [
         "🔊 爆量 · VOLUME SURGE",
         f"📌 {base_asset(symbol)}  ({symbol})",
         f"💲 价格: {_fmt_price(price)}",
         f"📊 1min 成交额: {_fmt_usd(quote_vol)}  ≈ {ratio:.1f}× 近{config.VOL_BURST_LOOKBACK}根中位",
         f"🕐 {now}",
-    ])
+    ]
+    if config.SMART_MONEY_LINK:
+        lines.append(f"🐋 聪明钱: {smart_money_link(symbol)}")
+    return "\n".join(lines)
 
 
 class Monitor:

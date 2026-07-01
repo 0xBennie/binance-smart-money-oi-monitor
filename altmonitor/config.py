@@ -66,6 +66,9 @@ TG_MIN_SEND_INTERVAL = _f("TG_MIN_SEND_INTERVAL", 3.2)  # seconds between sends 
 # --- Extra metrics ---
 LSR_PERIOD = os.getenv("LSR_PERIOD", "5m")   # long/short ratio granularity
 
+# --- Cross-link each alert to the Smart Money view (the TS half of this repo) ---
+SMART_MONEY_LINK = os.getenv("SMART_MONEY_LINK", "true").lower() in ("1", "true", "yes")
+
 # --- Persisted runtime state & history ---
 STATE_FILE = os.getenv("STATE_FILE", "state.json")
 HISTORY_ENABLED = os.getenv("HISTORY_ENABLED", "true").lower() in ("1", "true", "yes")
