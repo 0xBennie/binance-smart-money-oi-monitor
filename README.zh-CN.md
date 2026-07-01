@@ -273,10 +273,10 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 
 | 工具 | 参数 | 返回 |
 |---|---|---|
-| `get_smart_money` | `symbol` | 17 字段鲸鱼总览：多空鲸鱼数、均价、盈利者数、USD 名义敞口 |
+| `get_smart_money` | `symbol` | 分多空返回**聪明钱 + 鲸鱼各自的仓位**(USD)、均价、盈利者数 —— fapi 拿不到 |
 | `get_top_trader` | `symbol`, `period?` | 头部账户（top 20% 保证金）LSR + Taker 买卖比 |
 | `get_open_interest` | `symbol` | 全市场 OI（USD + 币数）+ 5m/15m/1h/4h 变化 |
-| `get_full_picture` | `symbol`, `period?` | 三者合一 + 聪明钱占 OI 比例 —— "X 现在什么仓位"的一键调用 |
+| `get_full_picture` | `symbol`, `period?` | 分多空的聪明钱 + 鲸鱼仓位、头部账户、OI + 占比 —— "X 现在什么仓位"的一键调用 |
 | `render_panel` | `symbol`, `includeHtml?` | 可分享的深色 HTML 聪明钱卡片（Smart Signal 样式）—— 返回 `{ summary, html }`；传 `includeHtml:false` 只要 summary |
 | `render_push` | `symbol` | Telegram `巨鲸总览` 推送卡片，`parse_mode:HTML` 消息体 —— 可直接发到聊天（相对 `render_panel` 的完整 HTML 页面）|
 

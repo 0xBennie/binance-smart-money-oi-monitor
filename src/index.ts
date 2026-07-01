@@ -6,7 +6,9 @@ export {
   getSmartMoneyOverviewBatch,
   smartMoneyNotionalUsd,
   smartMoneyShareOfOI,
+  smartMoneySide,
   type SmartMoneyOverview,
+  type SmartMoneySidePositions,
 } from './binance-smart-money.js';
 
 export {
