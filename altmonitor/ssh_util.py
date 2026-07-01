@@ -76,6 +76,18 @@ def build_rsync_argv(conn: dict, local_dir: str, remote_dir: str, excludes: list
     return argv
 
 
+def pick_compose(probe: str):
+    """Map a remote compose-probe result to the command to use.
+    'V2' -> 'docker compose' (CLI plugin), 'V1' -> 'docker-compose' (standalone),
+    anything else -> None (no compose available)."""
+    p = (probe or "").strip()
+    if "V2" in p:
+        return "docker compose"
+    if "V1" in p:
+        return "docker-compose"
+    return None
+
+
 def build_scp_argv(conn: dict, local_file: str, remote_path: str) -> list:
     """argv to copy a single file (e.g. .env) to host:remote_path."""
     argv = []

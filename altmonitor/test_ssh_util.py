@@ -107,6 +107,20 @@ class TestBuildRsyncArgv(unittest.TestCase):
         self.assertEqual(argv[:2], ["sshpass", "-e"])
 
 
+class TestPickCompose(unittest.TestCase):
+    def test_v2_plugin(self):
+        self.assertEqual(ssh_util.pick_compose("V2\n"), "docker compose")
+
+    def test_v1_standalone(self):
+        self.assertEqual(ssh_util.pick_compose("V1"), "docker-compose")
+
+    def test_none_available(self):
+        self.assertIsNone(ssh_util.pick_compose("NONE"))
+
+    def test_garbage(self):
+        self.assertIsNone(ssh_util.pick_compose(""))
+
+
 class TestBuildScpArgv(unittest.TestCase):
     def _conn(self, **kw):
         base = {"user": "root", "host": "h", "port": 2222, "key": "/k", "password": False}

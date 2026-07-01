@@ -63,10 +63,25 @@ def ensure_docker(conn: dict) -> None:
         r2 = ssh_util.run_remote(conn, "curl -fsSL https://get.docker.com | sh", timeout=600)
         if r2.returncode != 0:
             _abort("Docker 安装失败,请手动安装后重试。")
-    chk = ssh_util.run_remote(conn, "docker compose version || true", capture=True, timeout=30)
-    if "compose" not in (chk.stdout or "").lower():
-        print("   ⚠️ 未检测到 docker compose v2 插件。多数 get.docker.com 安装已含;"
-              "若失败请装 docker-compose-plugin。")
+    info = ssh_util.run_remote(conn, "docker info >/dev/null 2>&1 && echo UP || echo DOWN",
+                               capture=True, timeout=30)
+    if "UP" not in (info.stdout or ""):
+        _abort("Docker 已安装但守护进程未运行。请在服务器执行:"
+               "sudo systemctl enable --now docker 后重试。")
+
+
+def detect_compose(conn: dict) -> str:
+    """Pick the compose command the remote actually has: 'docker compose' (v2
+    plugin) or 'docker-compose' (standalone). Abort if neither is present."""
+    probe = ("docker compose version >/dev/null 2>&1 && echo V2 || "
+             "(docker-compose version >/dev/null 2>&1 && echo V1 || echo NONE)")
+    r = ssh_util.run_remote(conn, probe, capture=True, timeout=30)
+    cmd = ssh_util.pick_compose(r.stdout or "")
+    if not cmd:
+        _abort("远程既无 `docker compose`(v2 插件)也无 `docker-compose`(独立版)。"
+               "请在服务器安装 compose 后重试。")
+    print(f"   ✅ 远程 compose 命令:{cmd}")
+    return cmd
 
 
 def sync_and_up(conn: dict, remote_dir: str) -> None:
@@ -81,14 +96,14 @@ def sync_and_up(conn: dict, remote_dir: str) -> None:
     r = ssh_util.copy_file(conn, ENV_LOCAL, f"{remote_dir}/altmonitor/.env", timeout=120)
     if r.returncode != 0:
         _abort(".env 传输失败。")
-    print("   ⏳ docker compose up -d --build(远程,首次构建较慢)…")
-    r = ssh_util.run_remote(conn, f"cd {remote_dir} && docker compose up -d --build", timeout=1200)
+    print(f"   ⏳ {conn['compose']} up -d --build(远程,首次构建较慢)…")
+    r = ssh_util.run_remote(conn, f"cd {remote_dir} && {conn['compose']} up -d --build", timeout=1200)
     if r.returncode != 0:
-        _abort("远程 docker compose 启动失败,登录服务器看 docker compose logs。")
+        _abort(f"远程 compose 启动失败,登录服务器看 {conn['compose']} logs。")
 
 
 def verify_and_notify(conn: dict, remote_dir: str) -> None:
-    r = ssh_util.run_remote(conn, f"cd {remote_dir} && docker compose ps", capture=True, timeout=60)
+    r = ssh_util.run_remote(conn, f"cd {remote_dir} && {conn['compose']} ps", capture=True, timeout=60)
     out = (r.stdout or "").lower()
     if "running" in out or " up " in out:
         print(f"   ✅ 部署完成!容器在 {conn['host']} 后台运行中。")
@@ -100,7 +115,7 @@ def verify_and_notify(conn: dict, remote_dir: str) -> None:
         tg_probe.send_message(tok, chat, f"✅ 已部署到 {conn['host']} — 异动监控已在服务器后台常驻运行。")
     print(f"\n   更新:  python deploy.py --host {conn['host']} --update")
     print(f"   停止:  python deploy.py --host {conn['host']} --down")
-    print(f"   日志:  ssh {conn['host']} 'cd {remote_dir} && docker compose logs -f'")
+    print(f"   日志:  ssh {conn['host']} 'cd {remote_dir} && {conn['compose']} logs -f'")
 
 
 def collect_conn(args) -> dict:
@@ -138,13 +153,15 @@ def main(argv=None) -> None:
     remote_dir = args.dir
 
     if args.down:
-        print("   ⏳ docker compose down …")
-        ssh_util.run_remote(conn, f"cd {remote_dir} && docker compose down", timeout=120)
+        conn["compose"] = detect_compose(conn)
+        print(f"   ⏳ {conn['compose']} down …")
+        ssh_util.run_remote(conn, f"cd {remote_dir} && {conn['compose']} down", timeout=120)
         print("   ✅ 已停止(数据卷保留,state.json / alerts.db 不丢)。")
         return
 
     if not args.update:
         ensure_docker(conn)
+    conn["compose"] = detect_compose(conn)
     sync_and_up(conn, remote_dir)
     verify_and_notify(conn, remote_dir)
     print("\n🎉 部署完成!")
