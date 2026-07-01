@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import sys
 import time
 
 import aiohttp
@@ -324,7 +325,29 @@ async def main() -> None:
         await Monitor(session).run()
 
 
+def _handle_missing_config() -> None:
+    """Friendly onboarding when Telegram isn't configured yet — no hard crash."""
+    missing = config.missing_required()
+    print(f"⚠️  还没配置 Telegram({', '.join(missing)})。")
+    if sys.stdin.isatty():
+        ans = input("现在运行配置向导吗? [Y/n] ").strip().lower()
+        if ans in ("", "y", "yes"):
+            import setup
+            setup.main()
+        else:
+            print("好的。随时运行 python setup.py 来配置。")
+    else:
+        print("请运行 python setup.py 配置,或填好 altmonitor/.env(参考 .env.example)。")
+    sys.exit(0)
+
+
 if __name__ == "__main__":
+    if "--setup" in sys.argv:
+        import setup
+        setup.main()
+        sys.exit(0)
+    if config.missing_required():
+        _handle_missing_config()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

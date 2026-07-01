@@ -24,6 +24,20 @@
 - **Telegram 命令实时调参**(含 `/set_oi`、`/set_vol`),不用改 `.env` 重启,持久化到 `state.json`
 - 内置币安 429/418 退避 + Telegram 发送限速队列,防限频 / 防封 IP / 防刷屏
 
+## 🚀 最快上手:配置向导（推荐新手）
+
+不用手动找 token、查 chat_id、改配置文件。一条命令搞定:
+
+```bash
+cd altmonitor
+pip install -r requirements.txt   # 首次
+python setup.py
+```
+
+向导会:① 校验你的 @BotFather token → ② 让你给 bot 发一条消息、**自动抓取 chat_id**(无需第三方查 id bot)→ ③ 发送测试消息 → ④ 写好 `.env`(保留已有设置、自动备份)→ ⑤ 询问是否立即启动(本地 / Docker / **部署到你的服务器**)。
+
+> 未配置时直接运行 `python monitor.py` 也会友好提示并可转向导,不再硬报错。
+
 ## Docker 一键部署（推荐）
 
 在仓库根目录:
@@ -77,6 +91,25 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now altmonitor
 journalctl -u altmonitor -f          # 看日志
 ```
+
+## 🌐 部署到你的服务器（一条命令）
+
+想让它 7×24 跑在你自己的 VPS 上?配置向导第 ⑤ 步选「部署到我的服务器」,或直接:
+
+```bash
+cd altmonitor
+python deploy.py
+```
+
+输入 `user@host`,向导会:测试 SSH 连接(优先 key,不行再用密码)→ 自动装 Docker → 同步代码 + 你的 `.env` → `docker compose up -d`(崩溃自重启)→ 校验并给你发 Telegram 通知「已部署到 &lt;host&gt;」。
+
+```bash
+python deploy.py --host 1.2.3.4 --user root   # 免交互
+python deploy.py --update                      # 更新代码并重启（数据卷不丢）
+python deploy.py --down                        # 停止
+```
+
+> 认证优先用 SSH key;仅密码登录的服务器需本机装 `sshpass`。密码用 getpass 读取、经环境变量传递,**不落盘、不写日志**。
 
 ## Telegram 命令(直接在群里发,实时生效)
 | 命令 | 作用 |

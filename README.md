@@ -475,7 +475,21 @@ Telegram alerts in three flavors:
 - Optional SQLite alert history (all three alert types) for `/history` and `/stats` review
 - Free public endpoints only — no API key, no quota burn
 
-One-command deploy with Docker (from the repo root):
+**Fastest start — interactive wizard** (validates your bot token, auto-discovers your
+chat_id, writes `.env`, then offers to run locally / in Docker / deploy to your server):
+
+```bash
+cd altmonitor && pip install -r requirements.txt && python setup.py
+```
+
+**Deploy to your own VPS in one command** (tries SSH key then password, installs Docker,
+syncs code + `.env`, runs, and pings you on Telegram when live):
+
+```bash
+python altmonitor/deploy.py        # or pick "deploy to my server" at the end of setup.py
+```
+
+Or a one-command Docker deploy from the repo root:
 
 ```bash
 cp altmonitor/.env.example altmonitor/.env   # fill TG_BOT_TOKEN + TG_CHAT_ID
