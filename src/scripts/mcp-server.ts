@@ -39,6 +39,7 @@ import {
 } from '../binance-smart-money.js';
 import { getTopTraderSnapshot, type TopTraderPeriod } from '../binance-top-trader.js';
 import { getOpenInterest } from '../binance-open-interest.js';
+import { buildPanel, renderPanelHtml } from '../panel.js';
 
 const SERVER_INFO = { name: 'binance-smart-money', version: '1.0.0' };
 const PROTOCOL_VERSION = '2025-06-18';
@@ -144,6 +145,24 @@ async function toolGetFullPicture(args: any) {
   };
 }
 
+async function toolRenderPanel(args: any) {
+  const symbol = normalizeSymbol(args.symbol);
+  if (!symbol) return { error: 'symbol is required' };
+  const data = await buildPanel(symbol);
+  if (!data) return { symbol, error: 'no data' };
+  return {
+    symbol,
+    summary: {
+      totalNotionalUsd: Math.round(data.totalNotionalUsd),
+      longProfitPct: Math.round(data.long.profitPct * 100),
+      shortProfitPct: Math.round(data.short.profitPct * 100),
+      smShareOfOI: data.smShareOfOI == null ? null : Math.round(data.smShareOfOI * 1000) / 1000,
+    },
+    note: 'Write `html` to a .html file and open it in a browser (or screenshot it).',
+    html: renderPanelHtml(data),
+  };
+}
+
 const TOOLS: Record<string, { fn: (args: any) => Promise<any>; description: string; properties: any; required?: string[] }> = {
   get_smart_money: {
     fn: toolGetSmartMoney,
@@ -180,6 +199,15 @@ const TOOLS: Record<string, { fn: (args: any) => Promise<any>; description: stri
       symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' },
       period: { type: 'string', description: 'top-trader period (default 5m)' },
     },
+    required: ['symbol'],
+  },
+  render_panel: {
+    fn: toolRenderPanel,
+    description:
+      "Render a shareable Smart Money overview panel for a symbol as a self-contained dark HTML page " +
+      "(the binance.com Smart Signal card look). Returns { summary, html } — save the html to a .html " +
+      "file and open/screenshot it. Great for posting a coin's whale positioning to social.",
+    properties: { symbol: { type: 'string', description: 'e.g. "BEAT" or "BEATUSDT"' } },
     required: ['symbol'],
   },
 };

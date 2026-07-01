@@ -51,3 +51,11 @@ export {
 
 export { storage } from './storage.js';
 export type { SmartMoneySnapshotRow, TopTraderSnapshotRow, OISnapshotRow } from './storage.js';
+
+export {
+  buildPanel,
+  computePanel,
+  renderPanelHtml,
+  type PanelData,
+  type PanelSide,
+} from './panel.js';

@@ -9,6 +9,9 @@ logs/
 .vscode/
 .idea/
 
+# Generated panels (npm run panel)
+*-panel.html
+
 # Python (altmonitor)
 __pycache__/
 *.pyc
