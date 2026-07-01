@@ -90,14 +90,23 @@ def allowed_chat_ids() -> set[str]:
     return ids
 
 
-def validate() -> None:
+def missing_required() -> list:
+    """Names of required env vars that are not set (empty list = good to go)."""
     missing = []
     if not TG_BOT_TOKEN:
         missing.append("TG_BOT_TOKEN")
     if not TG_CHAT_ID:
         missing.append("TG_CHAT_ID")
+    return missing
+
+
+def validate() -> None:
+    missing = missing_required()
     if missing:
         raise SystemExit(
-            "Missing required env vars: %s\n"
-            "Copy .env.example to .env and fill them in." % ", ".join(missing)
+            "缺少必填配置:%s\n"
+            "最快的方式:运行交互式向导  python setup.py\n"
+            "(它会引导你连接 Telegram 并自动写好 .env)\n"
+            "或手动:cp .env.example .env 后填入这些变量。"
+            % ", ".join(missing)
         )
