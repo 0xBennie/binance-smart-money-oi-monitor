@@ -66,6 +66,8 @@ export interface SmartMoneyOverview {
   shortProfitWhales: number;           // ★
 }
 
+import { capSet } from './cache.js';
+
 interface CachedOverview { snap: SmartMoneyOverview; fetchedAt: number; }
 const cache = new Map<string, CachedOverview>();
 
@@ -122,7 +124,7 @@ export async function getSmartMoneyOverview(
     if (data?.code !== '000000' || !data?.data) return cached?.snap ?? null;
     const snap = parse(symbol, data.data);
     if (!snap) return cached?.snap ?? null;
-    cache.set(symbol, { snap, fetchedAt: Date.now() });
+    capSet(cache, symbol, { snap, fetchedAt: Date.now() });
     return snap;
   } catch (error) {
     const { sev, retryAfterSec } = detectBinanceBlockDetails(error);

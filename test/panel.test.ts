@@ -88,3 +88,10 @@ test('absurdly long ticker is capped, not rendered whole', () => {
   const html = renderPanelHtml(computePanel({ ...sm, symbol: 'A'.repeat(40) + 'USDT' }, null));
   assert.ok(!html.includes('A'.repeat(25)), 'over-long symbol truncated');
 });
+
+test('OI change footer treats oiChg as already-percent (no double ×100)', () => {
+  const oi: any = { symbol: 'BEATUSDT', ts: 0, oiNowUsd: 1e7, oiNowCoins: 1, oiChg5m: 0, oiChg15m: 0, oiChg1h: 1.87, oiChg4h: 4.05 };
+  const html = renderPanelHtml(computePanel(sm, 2.90, { oi }));
+  assert.ok(html.includes('+4.05%'), 'OI 4h change shown as +4.05%');
+  assert.ok(!html.includes('405'), 'not multiplied by 100 again');
+});
