@@ -180,7 +180,7 @@ const [sm, tt, oi] = await Promise.all([
 if (sm && oi) {
   console.log(`${sm.longWhales} 个多头鲸鱼 @ 均价 ${sm.longWhalesAvgEntryPrice}`);
   console.log(`${sm.longProfitTraders}/${sm.longTraders} 多头在盈利`);
-  console.log(`全市场 OI: $${(oi.oiNowUsd / 1e6).toFixed(2)}M，4h 变化 ${oi.oiChg4h.toFixed(2)}%`);
+  console.log(`全市场 OI: $${(oi.oiNowUsd / 1e6).toFixed(2)}M，4h 变化 ${oi.oiChg4h == null ? 'n/a' : oi.oiChg4h.toFixed(2) + '%'}`);
 
   // 聪明钱 USD 名义敞口，由 数量 × 均价 推导（不要用单位不一致的 totalPositions）。
   const smUsd = smartMoneyNotionalUsd(sm);
