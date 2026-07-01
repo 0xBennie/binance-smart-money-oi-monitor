@@ -79,9 +79,12 @@ test('zero shorts → ratio null, avg-entry 0 → pnl null (no fabricated PNL)',
   assert.equal(d.long.pnlUsd, null, 'no PNL when avg entry is 0');
 });
 
-test('footer carries a discoverable repo URL for shared screenshots', () => {
+test('footer carries repo URL, the X/Twitter promo, and a not-advice disclaimer', () => {
   const html = renderPanelHtml(computePanel(sm, 2.90));
   assert.ok(html.includes('github.com/0xBennie/binance-smart-money-oi-monitor'), 'repo URL in footer');
+  assert.ok(html.includes('x.com/0xBenniee'), 'X/Twitter promo baked into the card');
+  assert.ok(html.includes('非投资建议') || html.includes('not financial advice'), 'disclaimer on the shareable card');
+  assert.ok(!/https?:\/\//.test(html), 'still self-contained (no external URLs)');
 });
 
 test('absurdly long ticker is capped, not rendered whole', () => {

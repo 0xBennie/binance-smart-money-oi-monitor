@@ -45,3 +45,9 @@ test('missing price does not crash or emit NaN (derives from OI)', () => {
   assert.match(html, /BEAT/);
   assert.ok(!html.includes('NaN'));
 });
+
+test('push card footer carries the X promo + not-advice disclaimer', () => {
+  const html = formatSmartMoneyPush({ symbol: 'BEATUSDT', sm, oi, price: 2.9 });
+  assert.ok(html.includes('x.com/0xBenniee'), 'X/Twitter promo on the shared TG card');
+  assert.ok(html.includes('非投资建议') || html.includes('not financial advice'), 'disclaimer on the TG card');
+});
