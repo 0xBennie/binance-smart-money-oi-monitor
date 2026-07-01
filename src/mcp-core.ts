@@ -6,6 +6,7 @@ import {
   getSmartMoneyOverview,
   smartMoneyNotionalUsd,
   smartMoneyShareOfOI,
+  smartMoneySide,
 } from './binance-smart-money.js';
 import { getTopTraderSnapshot, type TopTraderPeriod } from './binance-top-trader.js';
 import { getOpenInterest } from './binance-open-interest.js';
@@ -13,7 +14,7 @@ import { buildPanel, renderPanelHtml } from './panel.js';
 import { buildPush } from './push.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.4.0' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.5.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
 const TT_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
 
@@ -30,25 +31,14 @@ async function toolGetSmartMoney(args: any) {
   const sm = await getSmartMoneyOverview(symbol);
   if (!sm) return { symbol, error: 'no data (symbol unsupported or Binance temporarily blocked)' };
 
-  const notionalUsd = smartMoneyNotionalUsd(sm);
-  const longProfitPct = sm.longTraders ? Math.round((sm.longProfitTraders / sm.longTraders) * 100) : null;
-  const shortProfitPct = sm.shortTraders ? Math.round((sm.shortProfitTraders / sm.shortTraders) * 100) : null;
   return {
     symbol,
     longShortRatio: sm.longShortRatio,
-    longWhales: sm.longWhales,
-    shortWhales: sm.shortWhales,
-    longWhalesAvgEntryPrice: sm.longWhalesAvgEntryPrice,
-    shortWhalesAvgEntryPrice: sm.shortWhalesAvgEntryPrice,
-    longProfitTraders: sm.longProfitTraders,
-    shortProfitTraders: sm.shortProfitTraders,
-    longProfitWhales: sm.longProfitWhales,
-    shortProfitWhales: sm.shortProfitWhales,
-    longProfitPct,
-    shortProfitPct,
-    notionalUsd: Math.round(notionalUsd),
+    totalNotionalUsd: Math.round(smartMoneyNotionalUsd(sm)),
+    long: smartMoneySide(sm, 'long'),
+    short: smartMoneySide(sm, 'short'),
     signalDayAgeHours: hoursAgo(sm.signalDay),
-    note: 'longWhalesAvgEntryPrice / profitTraders are bapi-only fields not exposed by public fapi.',
+    note: 'Per side: smartMoneyUsd = all smart-money traders position (qty×entry, USD); whalesUsd = whale-only position; avgEntry / profitPct / whaleProfitPct are bapi-only (not in public fapi). whalesUsd is 0 when Binance returns no whale qty.',
   };
 }
 
@@ -100,11 +90,9 @@ async function toolGetFullPicture(args: any) {
     symbol,
     smartMoney: sm && {
       longShortRatio: sm.longShortRatio,
-      longWhalesAvgEntryPrice: sm.longWhalesAvgEntryPrice,
-      shortWhalesAvgEntryPrice: sm.shortWhalesAvgEntryPrice,
-      longProfitPct: sm.longTraders ? Math.round((sm.longProfitTraders / sm.longTraders) * 100) : null,
-      shortProfitPct: sm.shortTraders ? Math.round((sm.shortProfitTraders / sm.shortTraders) * 100) : null,
-      notionalUsd: Math.round(smartMoneyNotionalUsd(sm)),
+      totalNotionalUsd: Math.round(smartMoneyNotionalUsd(sm)),
+      long: smartMoneySide(sm, 'long'),
+      short: smartMoneySide(sm, 'short'),
     },
     topTrader: tt && { topPositionLsr: tt.topPositionLSR, takerBuySellRatio: tt.takerBSR },
     openInterest: oi && { oiNowUsd: Math.round(oi.oiNowUsd), oiChg1h: oi.oiChg1h, oiChg4h: oi.oiChg4h },
@@ -156,9 +144,9 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
   get_smart_money: {
     fn: toolGetSmartMoney,
     description:
-      "Binance Smart Money (Smart Signal) whale overview for a symbol: long/short whale counts, " +
-      "their average entry prices, and how many traders/whales are currently in profit. These " +
-      "bapi-only fields are not exposed by the public fapi API.",
+      "Binance Smart Money (Smart Signal) overview for a symbol. Returns PER SIDE (long/short) both " +
+      "the smart-money (all traders) position and the whale-only position in USD, with average entry " +
+      "prices and how-many-in-profit — bapi-only fields the public fapi API can't give you.",
     properties: { symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' } },
     required: ['symbol'],
   },
@@ -182,8 +170,9 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
   get_full_picture: {
     fn: toolGetFullPicture,
     description:
-      "One-shot combined view: smart-money whales + top-trader flow + open interest + Smart Money's " +
-      "share of total OI. The single most useful call for 'what's the positioning on X'.",
+      "One-shot combined view: per-side smart-money + whale positions (long/short USD, avg entry, " +
+      "profit%), top-trader flow, open interest, and Smart Money's share of total OI. The single most " +
+      "useful call for 'what's the positioning on X'.",
     properties: {
       symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' },
       period: { type: 'string', enum: TT_PERIODS, description: 'top-trader period (default 5m)' },

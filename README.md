@@ -308,10 +308,10 @@ or just `npm run mcp` to launch the stdio server in the foreground.
 
 | Tool | Args | Returns |
 |---|---|---|
-| `get_smart_money` | `symbol` | 17-field whale overview: L/S whale counts, avg entry prices, in-profit counts, USD notional |
+| `get_smart_money` | `symbol` | Per-side (long/short) **smart-money + whale positions** (USD), avg entry prices, in-profit counts — bapi-only |
 | `get_top_trader` | `symbol`, `period?` | Top-trader (top 20% margin) LSR + Taker buy/sell ratio |
 | `get_open_interest` | `symbol` | Total OI (USD + coins) + 5m/15m/1h/4h velocity |
-| `get_full_picture` | `symbol`, `period?` | All three combined + Smart Money's share of total OI — the one-shot "what's the positioning on X" call |
+| `get_full_picture` | `symbol`, `period?` | Per-side smart-money + whale positions, top-trader flow, OI + SM's share of OI — the one-shot "what's the positioning on X" call |
 | `render_panel` | `symbol`, `includeHtml?` | Shareable dark-HTML Smart Money card (Smart Signal look) — returns `{ summary, html }`; pass `includeHtml:false` for summary-only |
 | `render_push` | `symbol` | Telegram `巨鲸总览` card as a `parse_mode:HTML` message body — the compact card to send straight to a chat (vs `render_panel`'s full standalone page) |
 

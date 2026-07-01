@@ -181,6 +181,41 @@ export function smartMoneyShareOfOI(
   return smUsd / oiNowUsd;
 }
 
+export interface SmartMoneySidePositions {
+  traders: number;               // count of smart-money traders on this side
+  smartMoneyUsd: number;         // 聪明钱仓位: all-trader qty × avg entry (entry basis)
+  avgEntry: number;              // trader average entry price
+  profitPct: number | null;      // % of traders in profit (null if no traders)
+  whales: number;                // count of whales (top 20% by margin) on this side
+  whalesUsd: number;             // 鲸鱼仓位: whale qty × whale avg entry (0 if bapi gave no whale qty)
+  whaleAvgEntry: number;         // whale average entry price
+  whaleProfitPct: number | null; // % of whales in profit (null if no whales)
+}
+
+/** Per-side breakdown of both cohorts — all smart-money traders AND whales-only —
+ * so a single query shows long/short 聪明钱 and 鲸鱼 positions without a panel. */
+export function smartMoneySide(sm: SmartMoneyOverview, side: 'long' | 'short'): SmartMoneySidePositions {
+  const isLong = side === 'long';
+  const traders = isLong ? sm.longTraders : sm.shortTraders;
+  const whales = isLong ? sm.longWhales : sm.shortWhales;
+  const tQty = isLong ? sm.longTradersQty : sm.shortTradersQty;
+  const tAvg = isLong ? sm.longTradersAvgEntryPrice : sm.shortTradersAvgEntryPrice;
+  const wQty = isLong ? sm.longWhalesQty : sm.shortWhalesQty;
+  const wAvg = isLong ? sm.longWhalesAvgEntryPrice : sm.shortWhalesAvgEntryPrice;
+  const tProfit = isLong ? sm.longProfitTraders : sm.shortProfitTraders;
+  const wProfit = isLong ? sm.longProfitWhales : sm.shortProfitWhales;
+  return {
+    traders,
+    smartMoneyUsd: Math.round(tQty * tAvg),
+    avgEntry: tAvg,
+    profitPct: traders > 0 ? Math.round((tProfit / traders) * 100) : null,
+    whales,
+    whalesUsd: Math.round(wQty * wAvg),
+    whaleAvgEntry: wAvg,
+    whaleProfitPct: whales > 0 ? Math.round((wProfit / whales) * 100) : null,
+  };
+}
+
 /**
  * Batch (cron use): serial + spacing + jitter, abort immediately on circuit-break.
  * 12s spacing × ±3s jitter is the empirical safe rate for web bapi.
