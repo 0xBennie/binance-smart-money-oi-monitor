@@ -12,9 +12,11 @@ import { getTopTraderSnapshot, type TopTraderPeriod } from './binance-top-trader
 import { getOpenInterest } from './binance-open-interest.js';
 import { buildPanel, renderPanelHtml } from './panel.js';
 import { buildPush } from './push.js';
+import { getFundingInfo, getFundingIntervalHours, fundingCountdownString } from './binance-ticker.js';
+import { fundingCost } from './funding.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.5.0' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.6.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
 const TT_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
 
@@ -78,14 +80,17 @@ async function toolGetOpenInterest(args: any) {
 async function toolGetFullPicture(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
-  const [sm, tt, oi] = await Promise.all([
+  const [sm, tt, oi, funding, intervalHours] = await Promise.all([
     getSmartMoneyOverview(symbol),
     getTopTraderSnapshot(symbol, (args.period as TopTraderPeriod) || '5m'),
     getOpenInterest(symbol),
+    getFundingInfo(symbol),
+    getFundingIntervalHours(symbol),
   ]);
   if (!sm && !tt && !oi) return { symbol, error: 'no data from any source' };
 
   const share = sm && oi ? smartMoneyShareOfOI(sm, oi.oiNowUsd) : null;
+  const fc = funding ? fundingCost(funding.lastFundingRate, intervalHours, 10_000) : null;
   return {
     symbol,
     smartMoney: sm && {
@@ -96,7 +101,33 @@ async function toolGetFullPicture(args: any) {
     },
     topTrader: tt && { topPositionLsr: tt.topPositionLSR, takerBuySellRatio: tt.takerBSR },
     openInterest: oi && { oiNowUsd: Math.round(oi.oiNowUsd), oiChg1h: oi.oiChg1h, oiChg4h: oi.oiChg4h },
+    funding: fc && {
+      ratePct: fc.ratePct,
+      intervalHours: fc.intervalHours,
+      annualizedPct: fc.annualizedPct,
+      per10kPerSettlementUsd: fc.perSettlementUsd,
+      longPays: fc.longPays,
+    },
     smartMoneyShareOfOI: share == null ? null : Math.round(share * 1000) / 1000,
+  };
+}
+
+async function toolGetFunding(args: any) {
+  const symbol = normalizeSymbol(args.symbol);
+  if (!symbol) return { error: 'symbol is required' };
+  const notionalUsd = Number(args.notionalUsd) > 0 ? Number(args.notionalUsd) : 10_000;
+  const [funding, intervalHours] = await Promise.all([
+    getFundingInfo(symbol),
+    getFundingIntervalHours(symbol),
+  ]);
+  if (!funding) return { symbol, error: 'no data' };
+  const cost = fundingCost(funding.lastFundingRate, intervalHours, notionalUsd);
+  return {
+    symbol,
+    ...cost,
+    nextFundingCountdown: fundingCountdownString(funding.nextFundingTime),
+    note: `Rate is per ${cost.intervalHours}h settlement; ${cost.longPays ? 'LONGS pay shorts' : 'SHORTS pay longs'}. `
+      + `perSettlementUsd / dailyUsd / annualUsd are for a $${cost.notionalUsd} position, signed from the long side (>0 = long pays).`,
   };
 }
 
@@ -176,6 +207,18 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
     properties: {
       symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' },
       period: { type: 'string', enum: TT_PERIODS, description: 'top-trader period (default 5m)' },
+    },
+    required: ['symbol'],
+  },
+  get_funding: {
+    fn: toolGetFunding,
+    description:
+      "Funding rate for a symbol, turned into money: the per-interval rate, its annualized %, and the " +
+      "USD you pay/receive per settlement / per day / per year on a position (default $10,000 — pass " +
+      "notionalUsd to change). Detects the real 8h/4h/1h settlement interval. rate>0 = longs pay shorts.",
+    properties: {
+      symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' },
+      notionalUsd: { type: 'number', description: 'position size in USD (default 10000)' },
     },
     required: ['symbol'],
   },

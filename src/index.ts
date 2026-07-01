@@ -27,10 +27,14 @@ export {
 export {
   getTicker24h,
   getFundingInfo,
+  getFundingIntervalHours,
   fundingCountdownString,
   type TickerInfo,
   type FundingInfo,
 } from './binance-ticker.js';
+
+// Funding-rate cost math: per-interval rate → annualized % + USD per settlement/day/year.
+export { fundingCost, type FundingCost } from './funding.js';
 
 export {
   formatSmartMoneyPush,

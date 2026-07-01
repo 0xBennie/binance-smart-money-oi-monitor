@@ -19,6 +19,7 @@ import {
 
 const TICKER_24H_URL = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
 const PREMIUM_INDEX_URL = 'https://fapi.binance.com/fapi/v1/premiumIndex';
+const FUNDING_INFO_URL = 'https://fapi.binance.com/fapi/v1/fundingInfo';
 const REQ_TIMEOUT_MS = 5_000;
 const CACHE_TTL_MS = 60_000;  // 1 min cache — ticker/funding don't move that fast
 
@@ -44,6 +45,41 @@ import { capSet } from './cache.js';
 
 const tickerCache = new Map<string, CachedTicker>();
 const fundingCache = new Map<string, CachedFunding>();
+
+// Funding interval (hours) per symbol. /fapi/v1/fundingInfo lists ONLY symbols
+// whose interval/caps differ from the 8h default, so we cache the whole map once
+// and treat any symbol not in it as the standard 8h. Getting this wrong makes the
+// annualized funding off by 2×/8× for 4h/1h symbols.
+let _intervalMap: Map<string, number> | null = null;
+let _intervalFetchedAt = 0;
+const INTERVAL_TTL_MS = 60 * 60_000;   // 1h — funding intervals rarely change
+
+export async function getFundingIntervalHours(symbol: string): Promise<number> {
+  const now = Date.now();
+  if (_intervalMap && now - _intervalFetchedAt < INTERVAL_TTL_MS) {
+    return _intervalMap.get(symbol) ?? 8;
+  }
+  if (isBinanceApiBlocked()) return _intervalMap?.get(symbol) ?? 8;
+  try {
+    await waitForBinanceWeightHeadroom();
+    const resp = await binanceHttp.get(FUNDING_INFO_URL, { timeout: REQ_TIMEOUT_MS });
+    updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
+    if (Array.isArray(resp.data)) {
+      const map = new Map<string, number>();
+      for (const it of resp.data) {
+        const h = parseInt(it?.fundingIntervalHours, 10);
+        if (it?.symbol && Number.isFinite(h) && h > 0) map.set(it.symbol, h);
+      }
+      _intervalMap = map;
+      _intervalFetchedAt = now;
+      return map.get(symbol) ?? 8;
+    }
+  } catch (error) {
+    const { sev, retryAfterSec } = detectBinanceBlockDetails(error);
+    if (sev) markBinanceApiBlockedWithRetry(sev, retryAfterSec);
+  }
+  return _intervalMap?.get(symbol) ?? 8;   // default 8h (standard) on any failure
+}
 
 export async function getTicker24h(symbol: string): Promise<TickerInfo | null> {
   const cached = tickerCache.get(symbol);

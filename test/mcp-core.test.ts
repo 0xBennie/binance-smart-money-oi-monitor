@@ -5,7 +5,7 @@ import { handle, TOOLS, SERVER_INFO } from '../src/mcp-core.js';
 test('tools/list exposes all five+ tools including render_panel and render_push', async () => {
   const resp: any = await handle({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
   const names = resp.result.tools.map((t: any) => t.name);
-  for (const n of ['get_smart_money', 'get_top_trader', 'get_open_interest', 'get_full_picture', 'render_panel', 'render_push']) {
+  for (const n of ['get_smart_money', 'get_top_trader', 'get_open_interest', 'get_full_picture', 'get_funding', 'render_panel', 'render_push']) {
     assert.ok(names.includes(n), `tools/list missing ${n}`);
   }
   // every tool advertises an object input schema requiring symbol
@@ -17,8 +17,8 @@ test('tools/list exposes all five+ tools including render_panel and render_push'
 
 test('initialize reports serverInfo version 1.3.0', async () => {
   const resp: any = await handle({ jsonrpc: '2.0', id: 2, method: 'initialize' });
-  assert.equal(resp.result.serverInfo.version, '1.5.0');
-  assert.equal(SERVER_INFO.version, '1.5.0');
+  assert.equal(resp.result.serverInfo.version, '1.6.0');
+  assert.equal(SERVER_INFO.version, '1.6.0');
 });
 
 test('tools/call marks isError=true when a tool returns an error result', async () => {
