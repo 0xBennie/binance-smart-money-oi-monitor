@@ -168,9 +168,12 @@ export function renderPanelHtml(d: PanelData): string {
       <span>总OI <b style="color:#eaecef;font-weight:500">${fmtUsd(d.oiNowUsd)}</b> <span style="color:${(d.oiChg4h ?? 0) >= 0 ? '#2ebd85' : '#f6465d'}">${fmtChg(d.oiChg4h)}(4h)</span></span>
     </div>
   </div>
-  <div style="padding:10px 18px;border-top:1px solid #2b3139;display:flex;justify-content:space-between;color:#5e6673;font-size:11px">
-    <span>${when}</span>
-    <span>github.com/0xBennie/binance-smart-money-oi-monitor · @0xBenniee</span>
+  <div style="padding:12px 18px;border-top:1px solid #2b3139;color:#5e6673;font-size:11px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span>${when}</span>
+      <span>🐦 <b style="color:#eaecef">x.com/0xBenniee</b> · Bennie Strategy</span>
+    </div>
+    <div style="margin-top:5px">github.com/0xBennie/binance-smart-money-oi-monitor · 仅数据分析,非投资建议 / not financial advice</div>
   </div>
 </div>
 </body></html>`;

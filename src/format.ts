@@ -145,6 +145,8 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
     lines.push('');
     lines.push(`<i>数据时间 ${new Date(sm.ts).toISOString().slice(0, 19).replace('T', ' ')} UTC</i>`);
   }
+  lines.push('');
+  lines.push('<i>🐦 x.com/0xBenniee · 仅数据分析,非投资建议 / not financial advice</i>');
 
   return lines.join('\n');
 }

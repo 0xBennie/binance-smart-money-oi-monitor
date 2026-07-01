@@ -16,7 +16,7 @@ import { getFundingInfo, getFundingIntervalHours, fundingCountdownString } from 
 import { fundingCost } from './funding.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.6.1' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.6.2' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // Auto-attached to every analysis result. This tool reports on-chain/exchange data
 // and structure — it deliberately does NOT emit buy/sell or directional signals.
@@ -174,6 +174,7 @@ async function toolRenderPush(args: any) {
     symbol,
     html,
     note: 'Telegram-ready message body (parse_mode: HTML) — the compact 巨鲸总览 card. Send it via the Bot API sendMessage.',
+    disclaimer: DISCLAIMER,
   };
 }
 
