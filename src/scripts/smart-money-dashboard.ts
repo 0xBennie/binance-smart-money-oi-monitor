@@ -15,6 +15,7 @@ import 'dotenv/config';
 import express from 'express';
 import { storage } from '../storage.js';
 import { smartMoneyNotionalUsd } from '../binance-smart-money.js';
+import { fmtChg } from '../format-num.js';
 
 const PORT = parseInt(process.env.SMART_MONEY_DASHBOARD_PORT || process.env.PORT || '3001', 10);
 
@@ -132,11 +133,6 @@ const fmtOiUsd = (v: number | null): string => {
   if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
   if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
   return `$${v.toFixed(0)}`;
-};
-const fmtChg = (v: number | null): string => {
-  if (v == null) return '—';
-  const sign = v > 0 ? '+' : '';
-  return `${sign}${v.toFixed(1)}%`;
 };
 const chgClass = (v: number | null): string => {
   if (v == null) return '';

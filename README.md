@@ -202,7 +202,7 @@ const [sm, tt, oi] = await Promise.all([
 if (sm && oi) {
   console.log(`${sm.longWhales} long whales @ avg ${sm.longWhalesAvgEntryPrice}`);
   console.log(`${sm.longProfitTraders}/${sm.longTraders} longs in profit`);
-  console.log(`Total OI: $${(oi.oiNowUsd / 1e6).toFixed(2)}M, 4h chg ${oi.oiChg4h.toFixed(2)}%`);
+  console.log(`Total OI: $${(oi.oiNowUsd / 1e6).toFixed(2)}M, 4h chg ${oi.oiChg4h == null ? 'n/a' : oi.oiChg4h.toFixed(2) + '%'}`);
 
   // Smart Money USD notional, derived from qty × avg-entry (NOT from the
   // undocumented `totalPositions` field whose unit is inconsistent).

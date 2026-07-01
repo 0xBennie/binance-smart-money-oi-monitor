@@ -141,5 +141,5 @@ class CommandHandler:
                 hours = int(args[0]) if args and args[0].isdigit() else 24
                 return self._history.stats(hours=hours)
         except (IndexError, ValueError):
-            return f"参数错误，看 /help"
+            return "参数错误，看 /help"
         return None
