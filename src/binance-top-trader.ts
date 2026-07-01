@@ -93,6 +93,12 @@ export async function getTopTraderSnapshot(
     takerBSR: parseFloat(taker.buySellRatio),
   };
 
+  // Drop a partial/garbage response rather than persisting NaN in the primary
+  // fields (SQLite would silently store them as NULL).
+  if (!Number.isFinite(snap.topPositionLSR) || !Number.isFinite(snap.takerBSR)) {
+    return cached?.snap ?? null;
+  }
+
   cache.set(key, { snap, fetchedAt: Date.now() });
   return snap;
 }

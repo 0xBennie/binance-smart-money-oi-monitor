@@ -14,12 +14,14 @@
 公开 `fapi` 接口**拿不到**的完整 17 字段鲸鱼总览，并内置 7 层 `418 / 429 / 403`
 限频封禁防护。
 
-本仓库包含 **两个独立工具** + **三种数据消费方式**：
+本仓库包含 **一套工作流的两半** + **三种数据消费方式**：
 
 | 工具 | 技术栈 | 作用 |
 |---|---|---|
 | **Smart Money 抓取器**（根目录 `src/`） | TypeScript | 把 17 字段鲸鱼总览 + 头部账户 + OI 快照入 SQLite，并提供 Express 看板 |
-| **[altmonitor](altmonitor/)**（`altmonitor/`） | Python | 全市场 1 分钟价格异动（±3%）+ OI 异动监控，带 Telegram bot |
+| **[altmonitor](https://github.com/0xBennie/binance-smart-money-oi-monitor/tree/main/altmonitor)**（`altmonitor/`） | Python | 全市场 1 分钟价格异动（±3%）+ OI 异动监控，带 Telegram bot |
+
+altmonitor 告诉你某个币**何时**异动（实时 Telegram 价格 / OI / 爆量告警）；Smart Money 抓取器 / MCP / 看板告诉你**是谁**在建仓、鲸鱼是否在盈利 —— 把告警到的币直接丢进 `get_full_picture` / `render_panel`。
 
 **Smart Money 数据三种消费方式** —— 当 [Node 库](#当作库使用)、走 [HTTP JSON API](#http-json-api)、或通过自带的
 [**MCP server**](#mcp-server从任意终端-ai-调用) 把它暴露成工具给任意终端 AI（Claude Code、Codex、Gemini CLI、Cursor……）。
@@ -197,7 +199,7 @@ npm run dashboard          # 默认 PORT=3001
 Model Context Protocol 工具 —— 无需 cron、无需本地数据库。兼容任意 MCP 客户端：
 **Claude Code、Claude Desktop、Codex CLI、Gemini CLI、Cursor、Windsurf、Cline、Zed、Continue** ……
 
-**一行注册到你自己的 AI —— 不用 clone、不用 build。** 发布到 npm 后，让客户端指向
+**一行注册到你自己的 AI —— 不用 clone、不用 build。** 让客户端指向
 `npx -y binance-smart-money-oi-monitor` 即可：
 
 ```json
@@ -218,7 +220,7 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 ```
 
 `npx` 会自动下载包、运行 `binance-smart-money-oi-monitor` 这个 bin（即 MCP server），
-你的 AI 就拿到下面 4 个工具。该 server 是纯 stdio JSON-RPC，运行时**不加载任何原生模块**
+你的 AI 就拿到下面 5 个工具。该 server 是纯 stdio JSON-RPC，运行时**不加载任何原生模块**
 （不拉 `better-sqlite3`/`express`）。
 
 <details>
@@ -247,6 +249,7 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 | `get_top_trader` | `symbol`, `period?` | 头部账户（top 20% 保证金）LSR + Taker 买卖比 |
 | `get_open_interest` | `symbol` | 全市场 OI（USD + 币数）+ 5m/15m/1h/4h 变化 |
 | `get_full_picture` | `symbol`, `period?` | 三者合一 + 聪明钱占 OI 比例 —— "X 现在什么仓位"的一键调用 |
+| `render_panel` | `symbol`, `includeHtml?` | 可分享的深色 HTML 聪明钱卡片（Smart Signal 样式）—— 返回 `{ summary, html }`；传 `includeHtml:false` 只要 summary |
 
 `get_full_picture ETH` 返回示例：
 
@@ -332,7 +335,9 @@ module.exports = {
 
 ## 伴随工具：altmonitor（价格 / OI / 爆量 异动监控）
 
-[`altmonitor/`](altmonitor/) 是一个自包含的 **Python** 工具（与上面的 TypeScript 抓取器相互独立），
+> altmonitor 机器人在 GitHub 仓库里（不随 npm 包发布）。
+
+[`altmonitor/`](https://github.com/0xBennie/binance-smart-money-oi-monitor/tree/main/altmonitor) 是一个自包含的 **Python** 工具（本仓库 Python 那一半），
 监控**全部** USDT 永续合约，推送三类 Telegram 告警：
 
 1. **价格异动** —— 单根 1 分钟 K 线涨/跌 ≥ ±3%，带价 × 仓四象限 + 振幅 + 多空比
@@ -344,6 +349,20 @@ module.exports = {
 - Telegram 命令（`/set_pump`、`/set_oi`、`/set_vol`、`/watch`、`/history`、`/stats` ……）实时调参，无需重启，持久化到 `state.json`
 - 可选 SQLite 告警历史（三类都存），供 `/history`、`/stats` 复盘
 - 全部免费公开接口 —— 无需 API key，不烧额度
+
+**最快上手：配置向导**（校验 bot token、自动抓取 chat_id、写好 `.env`，再询问本地 / Docker / 部署到你的服务器）：
+
+```bash
+cd altmonitor && pip install -r requirements.txt && python setup.py
+```
+
+贴 token → 给 bot 发消息 → 自动抓 chat_id → 写好 `.env` → 可选启动。
+
+**一条命令部署到自己的 VPS**（先试 SSH key 再用密码，装 Docker，同步代码 + `.env`，运行，上线后 Telegram 通知你）：
+
+```bash
+python altmonitor/deploy.py        # 或在 setup.py 最后选"部署到我的服务器"
+```
 
 Docker 一键部署（在仓库根目录）：
 
@@ -362,7 +381,7 @@ cp .env.example .env          # 填入 TG_BOT_TOKEN + TG_CHAT_ID
 python monitor.py
 ```
 
-完整配置、Telegram 命令表、Docker compose、systemd 配置见 [`altmonitor/README.md`](altmonitor/README.md)。
+完整配置、Telegram 命令表、Docker compose、systemd 配置见 [`altmonitor/README.md`](https://github.com/0xBennie/binance-smart-money-oi-monitor/tree/main/altmonitor#readme)。
 
 ---
 
@@ -378,10 +397,10 @@ python monitor.py
 
 由 **Bennie Strategy** 开发维护。
 
-- 🐦 X / 推特：[@0xBenniee](https://x.com/0xBenniee)
-- 💬 Telegram：[@OxBennie](https://t.me/OxBennie)
+- 🐦 X / 推特：[@0xBenniee](https://x.com/0xBenniee)（0x 是数字零加 x，双写 e）
+- 💬 Telegram：[@OxBennie](https://t.me/OxBennie)（Ox 是大写字母 O）
 
-有问题、想法或想要某个功能？两个渠道都可以找我，也欢迎提 issue / PR。
+两个 handle 都是对的，不是打错。有问题、想法或想要某个功能？两个渠道都可以找我，也欢迎提 issue / PR。
 
 ---
 

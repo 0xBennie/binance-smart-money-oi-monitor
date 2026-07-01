@@ -23,6 +23,11 @@ class TestParseEnv(unittest.TestCase):
         text = "TG_BOT_TOKEN=\n"
         self.assertEqual(env_io.parse_env(text), {"TG_BOT_TOKEN": ""})
 
+    def test_strips_inline_comments(self):
+        # matches python-dotenv: an inline # comment is not part of the value
+        text = "TG_BOT_TOKEN=          # bot token from @BotFather\nX=1   # note\n"
+        self.assertEqual(env_io.parse_env(text), {"TG_BOT_TOKEN": "", "X": "1"})
+
 
 class TestMergeEnv(unittest.TestCase):
     def test_updates_existing_key_in_place(self):

@@ -20,7 +20,9 @@ def parse_env(text: str) -> dict:
         if not s or s.startswith("#") or "=" not in s:
             continue
         key, _, val = s.partition("=")
-        out[key.strip()] = val.strip()
+        # Drop an inline comment (this tool's values are tokens/ids/numbers/
+        # symbols and never contain '#'), matching python-dotenv's behavior.
+        out[key.strip()] = val.split("#", 1)[0].strip()
     return out
 
 

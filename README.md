@@ -15,12 +15,14 @@ binance.com Futures) — pulls the full 17-field whale overview that the public
 `fapi` API does **not** expose, with a 7-layer defense against `418 / 429 / 403`
 rate-limit bans.
 
-This repo ships **two independent tools** plus **three ways to consume** the data:
+This repo ships **two halves of one workflow** plus **three ways to consume** the data:
 
 | Tool | Stack | What it does |
 |---|---|---|
 | **Smart Money tracker** (root `src/`) | TypeScript | Snapshots the 17-field whale overview + top-trader + OI to SQLite, serves an Express dashboard |
-| **[altmonitor](altmonitor/)** (`altmonitor/`) | Python | Full-market 1-minute price-move (±3%) + OI anomaly monitor with a Telegram bot |
+| **[altmonitor](https://github.com/0xBennie/binance-smart-money-oi-monitor/tree/main/altmonitor)** (`altmonitor/`) | Python | Full-market 1-minute price-move (±3%) + OI anomaly monitor with a Telegram bot |
+
+altmonitor tells you **WHEN** a symbol moves (real-time Telegram price/OI/volume alert); the Smart Money tracker / MCP / panel tells you **WHO** is positioned and whether whales are in profit — pipe the alerted symbol straight into `get_full_picture` / `render_panel`.
 
 **Consume the Smart Money data three ways** — as a [Node library](#as-a-library),
 over the [HTTP JSON API](#http-json-api), or through the bundled
@@ -243,7 +245,7 @@ The bundled MCP server exposes the **live** Smart Money / Top Trader / OI librar
 cron or local database needed. It works with any MCP-compatible client:
 **Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, Windsurf, Cline, Zed, Continue**, …
 
-**Register it with one line — no clone, no build.** Once published to npm, point
+**Register it with one line — no clone, no build.** Point
 your AI client at `npx -y binance-smart-money-oi-monitor`:
 
 ```json
@@ -264,7 +266,7 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 ```
 
 `npx` downloads the package, runs the `binance-smart-money-oi-monitor` bin (the MCP
-server), and your AI gets the four tools below. The server is pure stdio JSON-RPC
+server), and your AI gets the five tools below. The server is pure stdio JSON-RPC
 and pulls in no native modules (no `better-sqlite3`/`express` at runtime).
 
 <details>
@@ -293,6 +295,7 @@ or just `npm run mcp` to launch the stdio server in the foreground.
 | `get_top_trader` | `symbol`, `period?` | Top-trader (top 20% margin) LSR + Taker buy/sell ratio |
 | `get_open_interest` | `symbol` | Total OI (USD + coins) + 5m/15m/1h/4h velocity |
 | `get_full_picture` | `symbol`, `period?` | All three combined + Smart Money's share of total OI — the one-shot "what's the positioning on X" call |
+| `render_panel` | `symbol`, `includeHtml?` | Shareable dark-HTML Smart Money card (Smart Signal look) — returns `{ summary, html }`; pass `includeHtml:false` for summary-only |
 
 Example `get_full_picture ETH` result:
 
@@ -460,8 +463,10 @@ window time to drain between bursts.
 
 ## Companion: altmonitor (price / OI / volume anomaly monitor)
 
-[`altmonitor/`](altmonitor/) is a self-contained **Python** tool (separate from the
-TypeScript tracker above) that watches **every** USDT-perpetual contract and fires
+> The altmonitor bot lives in the GitHub repo (not the npm package).
+
+[`altmonitor/`](https://github.com/0xBennie/binance-smart-money-oi-monitor/tree/main/altmonitor) is a self-contained **Python** tool (the Python half
+of this repo) that watches **every** USDT-perpetual contract and fires
 Telegram alerts in three flavors:
 
 1. **Price move** — ±3% within a single 1-minute candle, annotated with the same-minute OI direction (price × OI quadrant), amplitude, and long/short ratio.
@@ -507,7 +512,7 @@ python monitor.py
 ```
 
 Full configuration, Telegram command reference, the Docker compose file, and the
-systemd unit are in [`altmonitor/README.md`](altmonitor/README.md).
+systemd unit are in [`altmonitor/README.md`](https://github.com/0xBennie/binance-smart-money-oi-monitor/tree/main/altmonitor#readme).
 
 ---
 
@@ -526,10 +531,10 @@ systemd unit are in [`altmonitor/README.md`](altmonitor/README.md).
 
 Built and maintained by **Bennie Strategy**.
 
-- 🐦 X / Twitter: [@0xBenniee](https://x.com/0xBenniee)
-- 💬 Telegram: [@OxBennie](https://t.me/OxBennie)
+- 🐦 X / Twitter: [@0xBenniee](https://x.com/0xBenniee) (zero-x, double-e)
+- 💬 Telegram: [@OxBennie](https://t.me/OxBennie) (capital O)
 
-Questions, ideas, or want a feature? Reach out on either — issues and PRs welcome too.
+Both handles are correct — not typos. Questions, ideas, or want a feature? Reach out on either — issues and PRs welcome too.
 
 ---
 
