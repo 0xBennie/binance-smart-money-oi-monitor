@@ -16,8 +16,11 @@ import { getFundingInfo, getFundingIntervalHours, fundingCountdownString } from 
 import { fundingCost } from './funding.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.6.0' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.6.1' };
 export const PROTOCOL_VERSION = '2025-06-18';
+// Auto-attached to every analysis result. This tool reports on-chain/exchange data
+// and structure — it deliberately does NOT emit buy/sell or directional signals.
+export const DISCLAIMER = '仅供数据分析,不构成投资建议。Data & analysis only — not financial advice.';
 const TT_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
 
 function hoursAgo(ms: number | undefined): number | null {
@@ -41,6 +44,7 @@ async function toolGetSmartMoney(args: any) {
     short: smartMoneySide(sm, 'short'),
     signalDayAgeHours: hoursAgo(sm.signalDay),
     note: 'Per side: smartMoneyUsd = all smart-money traders position (qty×entry, USD); whalesUsd = whale-only position; avgEntry / profitPct / whaleProfitPct are bapi-only (not in public fapi). whalesUsd is 0 when Binance returns no whale qty.',
+    disclaimer: DISCLAIMER,
   };
 }
 
@@ -109,6 +113,7 @@ async function toolGetFullPicture(args: any) {
       longPays: fc.longPays,
     },
     smartMoneyShareOfOI: share == null ? null : Math.round(share * 1000) / 1000,
+    disclaimer: DISCLAIMER,
   };
 }
 
@@ -128,6 +133,7 @@ async function toolGetFunding(args: any) {
     nextFundingCountdown: fundingCountdownString(funding.nextFundingTime),
     note: `Rate is per ${cost.intervalHours}h settlement; ${cost.longPays ? 'LONGS pay shorts' : 'SHORTS pay longs'}. `
       + `perSettlementUsd / dailyUsd / annualUsd are for a $${cost.notionalUsd} position, signed from the long side (>0 = long pays).`,
+    disclaimer: DISCLAIMER,
   };
 }
 
