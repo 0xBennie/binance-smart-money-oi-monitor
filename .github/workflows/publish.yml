@@ -36,6 +36,18 @@ jobs:
       - run: npm ci
       # npm >= 11.5 is required for OIDC trusted publishing.
       - run: npm install -g npm@latest
-      - run: npm publish --provenance --access public
+      # Skip cleanly if this version is already on npm (e.g. a Release created for
+      # an already-published version) instead of failing the run on a duplicate.
+      - id: published
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if npm view "binance-smart-money-oi-monitor@$V" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$V is already on npm — skipping publish"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.published.outputs.exists == 'false'
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
