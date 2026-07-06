@@ -17,7 +17,7 @@ import { fundingCost } from './funding.js';
 import { isBinanceApiBlocked } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.7.0' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.8.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // Auto-attached to every analysis result. This tool reports on-chain/exchange data
 // and structure — it deliberately does NOT emit buy/sell or directional signals.
@@ -192,6 +192,48 @@ async function toolRenderPush(args: any) {
   };
 }
 
+// These three read the local snapshot DB (better-sqlite3). Load it lazily so the
+// live tools above never require the native module — and if it's missing/empty,
+// degrade to a clear message instead of crashing the server.
+const DB_HINT = 'This reads the local snapshot DB. Run the tracker (smart-money-tick, ideally in daemon/watchlist mode) so it accumulates history — and better-sqlite3 must be installed.';
+
+async function toolGetChange(args: any) {
+  const symbol = normalizeSymbol(args.symbol);
+  if (!symbol) return { error: 'symbol is required' };
+  const minutes = Number(args.minutes) > 0 ? Number(args.minutes) : 60;
+  try {
+    const { getChange } = await import('./tracking.js');
+    return getChange(symbol, minutes);
+  } catch (e: any) {
+    return { symbol, error: `local DB unavailable (${e?.message ?? e}). ${DB_HINT}` };
+  }
+}
+
+async function toolScanExtreme(args: any) {
+  const limit = Number(args.limit) > 0 ? Math.min(Number(args.limit), 30) : 10;
+  const maxAgeMin = Number(args.maxAgeMin) > 0 ? Number(args.maxAgeMin) : 180;
+  try {
+    const { scanExtreme } = await import('./tracking.js');
+    return { ...scanExtreme({ limit, maxAgeMin }), disclaimer: DISCLAIMER };
+  } catch (e: any) {
+    return { error: `local DB unavailable (${e?.message ?? e}). ${DB_HINT}` };
+  }
+}
+
+async function toolRenderChart(args: any) {
+  const symbol = normalizeSymbol(args.symbol);
+  if (!symbol) return { error: 'symbol is required' };
+  const hours = Number(args.hours) > 0 ? Number(args.hours) : 24;
+  try {
+    const { buildChart, renderChartHtml } = await import('./chart.js');
+    const data = buildChart(symbol, hours);
+    if (data.rows.length < 2) return { symbol, error: `not enough local history for ${symbol}. ${DB_HINT}` };
+    return { symbol, points: data.rows.length, html: renderChartHtml(data), note: 'Save html to a .html file and open/screenshot it.' };
+  } catch (e: any) {
+    return { symbol, error: `local DB unavailable (${e?.message ?? e}). ${DB_HINT}` };
+  }
+}
+
 export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; description: string; properties: any; required?: string[] }> = {
   get_smart_money: {
     fn: toolGetSmartMoney,
@@ -264,6 +306,40 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
       "returns a full standalone HTML page to screenshot; render_push returns the compact Telegram " +
       "message you can send straight to a chat via the Bot API.",
     properties: { symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' } },
+    required: ['symbol'],
+  },
+  get_change: {
+    fn: toolGetChange,
+    description:
+      "How much each side ADDED or REDUCED over the last N minutes, from the local snapshot DB. " +
+      "Position deltas are in qty (contract count), not USD — so a price move isn't mistaken for a " +
+      "position change. Needs the tracker (smart-money-tick) to have recorded ≥2 snapshots for the symbol.",
+    properties: {
+      symbol: { type: 'string', description: 'e.g. "MAGMA" or "MAGMAUSDT"' },
+      minutes: { type: 'number', description: 'lookback window in minutes (default 60)' },
+    },
+    required: ['symbol'],
+  },
+  scan_extreme: {
+    fn: toolScanExtreme,
+    description:
+      "Market-wide long/short-imbalance scan from the local DB: the most long-heavy and most " +
+      "short-heavy symbols by smart-money long/short ratio (with each side's in-profit %). Needs the " +
+      "tracker to have populated snapshots; results are as fresh as the last sweep.",
+    properties: {
+      limit: { type: 'number', description: 'top N per side (default 10, max 30)' },
+      maxAgeMin: { type: 'number', description: 'ignore snapshots older than this many minutes (default 180)' },
+    },
+  },
+  render_chart: {
+    fn: toolRenderChart,
+    description:
+      "Time-series chart of a symbol's smart-money long/short position (qty) and average entry over " +
+      "time, as a self-contained dark HTML page (inline SVG, no external assets). Reads the local DB.",
+    properties: {
+      symbol: { type: 'string', description: 'e.g. "BEAT" or "BEATUSDT"' },
+      hours: { type: 'number', description: 'lookback window in hours (default 24)' },
+    },
     required: ['symbol'],
   },
 };

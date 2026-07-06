@@ -5,20 +5,21 @@ import { handle, TOOLS, SERVER_INFO } from '../src/mcp-core.js';
 test('tools/list exposes all five+ tools including render_panel and render_push', async () => {
   const resp: any = await handle({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
   const names = resp.result.tools.map((t: any) => t.name);
-  for (const n of ['get_smart_money', 'get_top_trader', 'get_open_interest', 'get_full_picture', 'get_funding', 'render_panel', 'render_push']) {
+  for (const n of ['get_smart_money', 'get_top_trader', 'get_open_interest', 'get_full_picture', 'get_funding', 'render_panel', 'render_push', 'get_change', 'scan_extreme', 'render_chart']) {
     assert.ok(names.includes(n), `tools/list missing ${n}`);
   }
-  // every tool advertises an object input schema requiring symbol
+  // every tool advertises an object input schema; all require symbol except the
+  // market-wide scan (scan_extreme takes no symbol).
   for (const t of resp.result.tools) {
     assert.equal(t.inputSchema.type, 'object');
-    assert.ok(t.inputSchema.required.includes('symbol'));
+    if (t.name !== 'scan_extreme') assert.ok(t.inputSchema.required.includes('symbol'));
   }
 });
 
-test('initialize reports serverInfo version 1.3.0', async () => {
+test('initialize reports serverInfo version 1.8.0', async () => {
   const resp: any = await handle({ jsonrpc: '2.0', id: 2, method: 'initialize' });
-  assert.equal(resp.result.serverInfo.version, '1.7.0');
-  assert.equal(SERVER_INFO.version, '1.7.0');
+  assert.equal(resp.result.serverInfo.version, '1.8.0');
+  assert.equal(SERVER_INFO.version, '1.8.0');
 });
 
 test('tools/call marks isError=true when a tool returns an error result', async () => {

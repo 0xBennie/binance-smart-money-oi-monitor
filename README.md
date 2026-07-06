@@ -319,6 +319,11 @@ or just `npm run mcp` to launch the stdio server in the foreground.
 | `get_funding` | `symbol`, `notionalUsd?` | Funding rate → annualized % + the USD you pay/receive per settlement / day / year on a position (default $10k); detects the real 8h/4h/1h interval |
 | `render_panel` | `symbol`, `includeHtml?` | Shareable dark-HTML Smart Money card (Smart Signal look) — returns `{ summary, html }`; pass `includeHtml:false` for summary-only |
 | `render_push` | `symbol` | Telegram `巨鲸总览` card as a `parse_mode:HTML` message body — the compact card to send straight to a chat (vs `render_panel`'s full standalone page) |
+| `get_change` | `symbol`, `minutes?` | How much each side **added/reduced** over the last N min (qty, not USD) — from the local DB; needs the tracker running |
+| `scan_extreme` | `limit?`, `maxAgeMin?` | Market-wide **most long-heavy / most short-heavy** symbols by smart-money LSR — from the local DB |
+| `render_chart` | `symbol`, `hours?` | Time-series **dark-HTML chart** of long/short position (qty) + avg entry over time — from the local DB |
+
+The last three read the **local snapshot DB** (see [Track over time](#track-over-time-local-db)); the rest hit Binance live and need no DB.
 
 Example `get_full_picture ETH` result:
 
@@ -354,6 +359,38 @@ The third way is the MCP tool `render_panel` (see the tools table above), so
 your AI can generate a panel on demand. However you build it, the card is
 dependency-free (no external assets), so it renders anywhere and screenshots
 cleanly.
+
+---
+
+## Track over time (local DB)
+
+The single-symbol calls above are point-in-time. To answer *"how much did shorts
+**add/reduce** in the last 15 min"* or *"which coins are the most one-sided right
+now"*, run the tracker so it accumulates snapshots locally — then query the history.
+
+**1. Auto-track a watchlist** (self-scheduling daemon — no external cron):
+
+```bash
+SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA SMART_MONEY_INTERVAL_MIN=15 npm run track
+```
+
+Or a `watchlist.json` (`["BEAT","BIRB"]` or `{"symbols":[...]}`) instead of the env var.
+A watchlist of ≤ ~70 symbols refreshes safely every 15 min (12s/symbol spacing);
+leave the watchlist empty for the full market (then use a longer interval / sharding).
+It writes to `data/snapshots.db` (30-day retention) and, with Docker, `docker compose up -d`
+runs it as a daemon out of the box.
+
+**2. Query the accumulated history:**
+
+```bash
+npm run change MAGMA 15    # → "多头加仓 300，空头减仓 200" (qty deltas over ~15 min)
+npm run scan               # → most long-heavy / most short-heavy symbols by LSR
+npm run chart BEAT 24      # → beat-chart.html: long/short position + avg entry over 24h
+```
+
+Same three as library calls (`getChange`, `scanExtreme`, `buildChart`/`renderChartHtml`)
+and MCP tools (`get_change`, `scan_extreme`, `render_chart`). Position deltas use **qty
+(contract count), not USD** — so a price move isn't mistaken for a position change.
 
 ---
 

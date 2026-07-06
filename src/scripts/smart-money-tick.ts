@@ -25,20 +25,55 @@
  *       cron B: `37 * * * *` env SMART_MONEY_SHARD_INDEX=1 SMART_MONEY_SHARD_TOTAL=2
  */
 import 'dotenv/config';
+import { existsSync, readFileSync } from 'node:fs';
 import axios from 'axios';
 import { storage } from '../storage.js';
 import { getSmartMoneyOverviewBatch } from '../binance-smart-money.js';
 import { preflightBinanceFapi } from '../binance-rate-limit.js';
 import { installGracefulShutdown } from '../cron-utils.js';
+import { normalizeSymbol } from '../symbol.js';
 
 const POOL_MAX    = parseInt(process.env.SMART_MONEY_POOL_MAX    || '0', 10); // 0 = unlimited
 const SHARD_INDEX = parseInt(process.env.SMART_MONEY_SHARD_INDEX || '0', 10);
 const SHARD_TOTAL = Math.max(1, parseInt(process.env.SMART_MONEY_SHARD_TOTAL || '1', 10));
+// Daemon mode: if > 0, keep running a fresh sweep every N minutes (no external
+// cron needed). 0 = run once and exit (classic cron entry).
+const INTERVAL_MIN = parseInt(process.env.SMART_MONEY_INTERVAL_MIN || '0', 10);
 
 const SPACING_MS = 12_000;
 const JITTER_MS = 3_000;
 
+/**
+ * Explicit watchlist to track at high cadence: env SMART_MONEY_WATCHLIST
+ * ("BEAT,BIRB,MAGMA") or a watchlist.json (["BEAT",...] or {"symbols":[...]}).
+ * When set, only these symbols are swept (POOL_MAX / sharding are ignored) — so a
+ * small list can refresh every 15 min. Empty = full market (old behavior).
+ */
+function resolveWatchlist(): string[] {
+  const raw = new Set<string>();
+  for (const t of (process.env.SMART_MONEY_WATCHLIST || '').split(',')) {
+    const s = normalizeSymbol(t);
+    if (s) raw.add(s);
+  }
+  const file = process.env.SMART_MONEY_WATCHLIST_FILE || 'watchlist.json';
+  if (existsSync(file)) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, 'utf-8'));
+      const arr: unknown[] = Array.isArray(parsed) ? parsed : parsed?.symbols ?? [];
+      for (const t of arr) { const s = normalizeSymbol(String(t)); if (s) raw.add(s); }
+    } catch (e: any) {
+      console.warn(`[smart-money-tick] bad ${file}: ${e?.message ?? e}`);
+    }
+  }
+  return [...raw].sort();
+}
+
 async function getAllUsdtPerpetuals(): Promise<string[]> {
+  const watchlist = resolveWatchlist();
+  if (watchlist.length) {
+    console.log(`[smart-money-tick] watchlist mode: ${watchlist.length} symbols`);
+    return watchlist;
+  }
   try {
     const exInfo = await axios.get(
       'https://fapi.binance.com/fapi/v1/exchangeInfo',
@@ -68,23 +103,20 @@ async function getAllUsdtPerpetuals(): Promise<string[]> {
   }
 }
 
-async function main(): Promise<void> {
-  installGracefulShutdown('smart-money-tick');
+/** One full sweep (assumes storage is already initialized). */
+async function runOnce(): Promise<void> {
   const startedAt = Date.now();
-  storage.init();
 
   // Preflight: fapi ping, fail-fast on 418/403 — do not slam a blocked IP
   const healthy = await preflightBinanceFapi();
   if (!healthy) {
-    console.log('[smart-money-tick] preflight failed, abort');
-    storage.stop();
+    console.log('[smart-money-tick] preflight failed, skip this sweep');
     return;
   }
 
   const pool = await getAllUsdtPerpetuals();
   if (pool.length === 0) {
     console.log('[smart-money-tick] no symbols, skip');
-    storage.stop();
     return;
   }
 
@@ -119,13 +151,34 @@ async function main(): Promise<void> {
     `[smart-money-tick] done${shardTag} requested=${pool.length} captured=${snapshots.size} ` +
     `written=${written} cleaned(sm/tt/oi)=${cleaned.smartMoney}/${cleaned.topTrader}/${cleaned.oi} elapsed=${elapsedS.toFixed(1)}s`
   );
+}
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function main(): Promise<void> {
+  installGracefulShutdown('smart-money-tick');
+  storage.init();
+
+  if (INTERVAL_MIN > 0) {
+    // Self-scheduling daemon: no external cron needed. Runs a sweep, then waits
+    // INTERVAL_MIN before the next. Graceful shutdown closes storage on SIGTERM.
+    console.log(`[smart-money-tick] daemon mode: sweeping every ${INTERVAL_MIN} min`);
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const start = Date.now();
+      try { await runOnce(); } catch (e: any) { console.error('[smart-money-tick] sweep error:', e?.message ?? e); }
+      const waitMs = Math.max(5_000, INTERVAL_MIN * 60_000 - (Date.now() - start));
+      await sleep(waitMs);
+    }
+  }
+
+  await runOnce();
   storage.stop();
 }
 
 main()
-  .then(() => process.exit(0))
-  .catch(e => {
+  .then(() => { if (INTERVAL_MIN <= 0) process.exit(0); })
+  .catch((e) => {
     console.error('[smart-money-tick] fatal:', e);
     process.exit(1);
   });
