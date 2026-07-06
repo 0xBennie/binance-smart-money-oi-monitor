@@ -34,8 +34,23 @@ export interface OISnapshotRow {
   oiChg4h: number | null;
 }
 
+/** A slim smart-money row for history / change / scan reads (camelCase). */
+export interface SmartMoneyHistoryRow {
+  symbol?: string; ts: number; longShortRatio: number;
+  longTraders: number; longQty: number; longAvg: number;
+  shortTraders: number; shortQty: number; shortAvg: number;
+  longProfitTraders: number; shortProfitTraders: number;
+  longWhales: number; shortWhales: number;
+}
+
 const RETENTION_DAYS = 30;
 const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'snapshots.db');
+const SM_SELECT_COLS =
+  `ts, long_short_ratio AS longShortRatio,
+   long_traders AS longTraders, long_traders_qty AS longQty, long_traders_avg_entry_price AS longAvg,
+   short_traders AS shortTraders, short_traders_qty AS shortQty, short_traders_avg_entry_price AS shortAvg,
+   long_profit_traders AS longProfitTraders, short_profit_traders AS shortProfitTraders,
+   long_whales AS longWhales, short_whales AS shortWhales`;
 
 class Storage {
   private db: Database.Database | null = null;
@@ -161,6 +176,36 @@ class Storage {
   /** Read-only handle for dashboards / queries. */
   getDbReadonly(dbPath = DEFAULT_DB_PATH): Database.Database {
     return new Database(dbPath, { readonly: true });
+  }
+
+  /** Smart-money snapshots for one symbol since `sinceMs`, oldest first. */
+  smartMoneyHistory(symbol: string, sinceMs: number, dbPath = DEFAULT_DB_PATH): SmartMoneyHistoryRow[] {
+    if (!fs.existsSync(dbPath)) return [];   // no local DB yet (e.g. ephemeral npx run)
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      return db.prepare(
+        `SELECT ${SM_SELECT_COLS} FROM ob_smart_money_snapshots
+         WHERE symbol = ? AND ts >= ? ORDER BY ts ASC`
+      ).all(symbol, sinceMs) as SmartMoneyHistoryRow[];
+    } finally { db.close(); }
+  }
+
+  /** Latest snapshot per symbol — for market-wide ranking / scans. */
+  latestSmartMoney(dbPath = DEFAULT_DB_PATH): SmartMoneyHistoryRow[] {
+    if (!fs.existsSync(dbPath)) return [];   // no local DB yet
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      return db.prepare(
+        `SELECT s.symbol AS symbol, s.ts AS ts, s.long_short_ratio AS longShortRatio,
+                s.long_traders AS longTraders, s.long_traders_qty AS longQty, s.long_traders_avg_entry_price AS longAvg,
+                s.short_traders AS shortTraders, s.short_traders_qty AS shortQty, s.short_traders_avg_entry_price AS shortAvg,
+                s.long_profit_traders AS longProfitTraders, s.short_profit_traders AS shortProfitTraders,
+                s.long_whales AS longWhales, s.short_whales AS shortWhales
+         FROM ob_smart_money_snapshots s
+         JOIN (SELECT symbol, MAX(ts) AS mts FROM ob_smart_money_snapshots GROUP BY symbol) m
+           ON s.symbol = m.symbol AND s.ts = m.mts`
+      ).all() as SmartMoneyHistoryRow[];
+    } finally { db.close(); }
   }
 
   stop(): void {

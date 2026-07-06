@@ -71,3 +71,17 @@ export {
 
 // Fetch + render the Telegram "巨鲸总览" push card (parse_mode: HTML) in one call.
 export { buildPush } from './push.js';
+
+// Time-series over the local snapshot DB: per-side added/reduced + market-wide scan.
+export {
+  computeChange,
+  getChange,
+  scanExtreme,
+  type SideChange,
+  type ChangeResult,
+  type ExtremeEntry,
+} from './tracking.js';
+export type { SmartMoneyHistoryRow } from './storage.js';
+
+// Time-series chart (self-contained dark HTML + inline SVG).
+export { buildChart, renderChartHtml, type ChartData } from './chart.js';

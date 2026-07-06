@@ -284,6 +284,11 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 | `get_funding` | `symbol`, `notionalUsd?` | 资金费率 → 年化 % + 一笔仓位每次 / 每天 / 每年 付(收)多少 U(默认 1万U);自动识别 8h/4h/1h 周期 |
 | `render_panel` | `symbol`, `includeHtml?` | 可分享的深色 HTML 聪明钱卡片（Smart Signal 样式）—— 返回 `{ summary, html }`；传 `includeHtml:false` 只要 summary |
 | `render_push` | `symbol` | Telegram `巨鲸总览` 推送卡片，`parse_mode:HTML` 消息体 —— 可直接发到聊天（相对 `render_panel` 的完整 HTML 页面）|
+| `get_change` | `symbol`, `minutes?` | 近 N 分钟多空各**加仓/减仓**多少（qty 口径，非 USD）—— 读本地 DB，需 tracker 在跑 |
+| `scan_extreme` | `limit?`, `maxAgeMin?` | 全市场**最偏多 / 最偏空**代币（按聪明钱 LSR）—— 读本地 DB |
+| `render_chart` | `symbol`, `hours?` | 多空持仓量 + 均价随时间的**深色 HTML 时序图** —— 读本地 DB |
+
+最后三个读**本地快照 DB**（见 [时序跟踪](#时序跟踪本地-db)）；其余走币安实时、无需 DB。
 
 `get_full_picture ETH` 返回示例：
 
@@ -316,6 +321,34 @@ const html = renderPanelHtml((await buildPanel('BEAT'))!);   // 当库用
 
 第三种方式是 MCP 工具 `render_panel`（见上方工具表），让你的 AI 当场生成看板。
 无论用哪种方式，卡片都零依赖（无外链），到哪都能渲染、截图干净。
+
+---
+
+## 时序跟踪（本地 DB）
+
+上面的单币查询都是**当下快照**。想回答"近 15 分钟空头**减了多少**""现在哪些币多空最一边倒"，
+就让 tracker 在本地攒快照，再查历史。
+
+**1. 自动追踪监控名单**（自调度 daemon，无需外部 cron）：
+
+```bash
+SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA SMART_MONEY_INTERVAL_MIN=15 npm run track
+```
+
+也可用 `watchlist.json`（`["BEAT","BIRB"]` 或 `{"symbols":[...]}`）代替环境变量。
+名单 ≤ ~70 个币可安全 15 分钟刷一轮（12 秒/币）；留空则全市场（要用更长间隔/分片）。
+写入 `data/snapshots.db`（保留 30 天）；用 Docker 时 `docker compose up -d` 直接把它当 daemon 跑。
+
+**2. 查攒下来的历史：**
+
+```bash
+npm run change MAGMA 15    # → "多头加仓 300，空头减仓 200"（近 ~15 分钟 qty 差值）
+npm run scan               # → 按 LSR 列最偏多 / 最偏空的币
+npm run chart BEAT 24      # → beat-chart.html：多空持仓 + 均价 24h 时序图
+```
+
+同样有库函数（`getChange`/`scanExtreme`/`buildChart`+`renderChartHtml`）和 MCP 工具
+（`get_change`/`scan_extreme`/`render_chart`）。持仓变化用 **qty（张数）而非 USD 名义** —— 避免把涨价误算成加仓。
 
 ---
 
