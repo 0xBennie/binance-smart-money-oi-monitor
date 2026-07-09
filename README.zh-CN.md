@@ -522,6 +522,15 @@ python monitor.py
 
 ---
 
+## 常见问题
+
+完整清单见 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**。最常踩的几个：
+
+- **某个币报 `no data / 可能不支持`，但明明有这个合约**（如 POWER）→ 多半是 `bapi` 接口**临时抽风**，**重试一两次**通常就回来了；若 `get_open_interest`/`get_funding` 能出，说明只是抽风。少数低量合约确实没有聪明钱覆盖（OI/费率仍可用）。**别凭一次 null 就断定"不支持"。**
+- **所有工具都报 `temporarily rate-limited/blocked`** → 熔断器被 418/403 触发，等 stderr 里的 TTL，或换到能连币安的地区/VPS 跑。
+- **`get_change`/`scan_extreme`/`render_chart` 说"没数据"** → 它们读本地 `data/snapshots.db`；注册 MCP 时用绝对 `cwd`、并让 tracker 在同一目录跑。7 个实时工具不需要 DB。
+- **`npm publish` 报 `EOTP` / 发布流水线报 `ENEEDAUTH`** → 用**勾了「Bypass 2FA」**的 npm token（或配 Trusted Publisher）；普通 token / 安全密钥 2FA 无法非交互发布。
+
 ## 本仓库**不**包含
 
 - ❌ 不交易，纯数据。
