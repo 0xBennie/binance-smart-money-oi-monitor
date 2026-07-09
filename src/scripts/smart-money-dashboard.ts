@@ -12,10 +12,18 @@
  *   GET /health                    — health probe
  */
 import 'dotenv/config';
-import express from 'express';
 import { storage } from '../storage.js';
 import { smartMoneyNotionalUsd } from '../binance-smart-money.js';
 import { fmtChg } from '../format-num.js';
+
+// express is an optional dependency (only the dashboard needs it). Load it
+// dynamically so a missing/failed install gives a clear message, not a crash.
+const _expressMod = await import('express').catch(() => null);
+if (!_expressMod) {
+  console.error('[dashboard] "express" is not installed — run: npm install express');
+  process.exit(1);
+}
+const express = _expressMod.default;
 
 const PORT = parseInt(process.env.SMART_MONEY_DASHBOARD_PORT || process.env.PORT || '3001', 10);
 

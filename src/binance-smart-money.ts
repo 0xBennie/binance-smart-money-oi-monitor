@@ -111,26 +111,39 @@ export async function getSmartMoneyOverview(
 
   if (isBinanceApiBlocked()) return cached?.snap ?? null;
 
-  await waitForBinanceWeightHeadroom();
-
-  try {
-    const resp = await binanceHttp.get(SMART_MONEY_URL, {
-      params: { symbol },
-      headers: REQ_HEADERS,
-      timeout: REQ_TIMEOUT_MS,
-    });
-    updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
-    const data = resp.data;
-    if (data?.code !== '000000' || !data?.data) return cached?.snap ?? null;
-    const snap = parse(symbol, data.data);
-    if (!snap) return cached?.snap ?? null;
-    capSet(cache, symbol, { snap, fetchedAt: Date.now() });
-    return snap;
-  } catch (error) {
-    const { sev, retryAfterSec } = detectBinanceBlockDetails(error);
-    if (sev) markBinanceApiBlockedWithRetry(sev, retryAfterSec);
-    return cached?.snap ?? null;
+  // The bapi Smart Money endpoint occasionally returns an empty body for a symbol
+  // that DOES have data (a transient blip — see POWER). Retry once before giving
+  // up, so a blip isn't mistaken for "symbol unsupported". On a real block, stop
+  // immediately (never retry-loop a 418).
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await waitForBinanceWeightHeadroom();
+    try {
+      const resp = await binanceHttp.get(SMART_MONEY_URL, {
+        params: { symbol },
+        headers: REQ_HEADERS,
+        timeout: REQ_TIMEOUT_MS,
+      });
+      updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
+      const data = resp.data;
+      if (data?.code === '000000' && data?.data) {
+        const snap = parse(symbol, data.data);
+        if (snap) {
+          capSet(cache, symbol, { snap, fetchedAt: Date.now() });
+          return snap;
+        }
+      }
+      // empty / unparseable → brief pause, then one retry
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
+    } catch (error) {
+      const { sev, retryAfterSec } = detectBinanceBlockDetails(error);
+      if (sev) {
+        markBinanceApiBlockedWithRetry(sev, retryAfterSec);
+        break; // blocked — don't retry
+      }
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
+    }
   }
+  return cached?.snap ?? null;
 }
 
 /**

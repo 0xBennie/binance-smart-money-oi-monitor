@@ -134,6 +134,15 @@ async function runOnce(): Promise<void> {
       `Consider SMART_MONEY_SHARD_TOTAL=${Math.ceil(etaSec / 3600)} or a longer cron interval.`
     );
   }
+  // Daemon mode: warn if a sweep can't finish inside the interval → overlapping
+  // sweeps contend on the SQLite WAL lock. Keep the watchlist small enough.
+  if (INTERVAL_MIN > 0 && etaSec > INTERVAL_MIN * 60) {
+    const fit = Math.floor((INTERVAL_MIN * 60) / (SPACING_MS / 1000));
+    console.warn(
+      `[smart-money-tick] WARNING: sweep ~${(etaSec / 60).toFixed(0)}min > interval ${INTERVAL_MIN}min ` +
+      `→ sweeps will overlap. Trim the watchlist to ≤${fit} symbols or raise SMART_MONEY_INTERVAL_MIN.`
+    );
+  }
 
   // Write each snapshot the moment it lands — a mid-run crash/418 then keeps
   // everything captured so far instead of discarding the whole batch.
