@@ -17,7 +17,7 @@ import { fundingCost } from './funding.js';
 import { isBinanceApiBlocked } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.8.1' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.9.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // Auto-attached to every analysis result. This tool reports on-chain/exchange data
 // and structure — it deliberately does NOT emit buy/sell or directional signals.
@@ -344,6 +344,26 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
   },
 };
 
+// ── Prompts (example workflows, so a new user knows what to ask) ─────────────
+
+export const PROMPTS: Record<string, { description: string; arguments: { name: string; description: string; required?: boolean }[]; build: (a: any) => string }> = {
+  positioning: {
+    description: "Read a coin's smart-money positioning and call it (squeeze / distribution / neutral).",
+    arguments: [{ name: 'symbol', description: 'e.g. BEAT', required: true }],
+    build: (a) => `Use get_full_picture for ${a.symbol || 'the symbol'}. Then tell me, plainly: which side is crowded, whose average entry is underwater vs in profit, where price sits relative to the whale cost lines, and whether this looks like a short squeeze, a long distribution, or neutral. Note OI velocity and funding. Remember this is data/context, not a signal.`,
+  },
+  'squeeze-scan': {
+    description: 'Find short-squeeze candidates across the market (needs the tracker running).',
+    arguments: [],
+    build: () => `Use scan_extreme to list the most short-heavy coins. For the top 3, call get_full_picture and flag any short-squeeze setup: crowded shorts that are underwater (low short profit%), OI rising, and negative funding. Summarize as a short ranked list; not financial advice.`,
+  },
+  'whale-cost': {
+    description: 'Whale average entry (cost lines) for a coin and where price is vs them.',
+    arguments: [{ name: 'symbol', description: 'e.g. ETH', required: true }],
+    build: (a) => `For ${a.symbol || 'the symbol'}, use get_smart_money and report the long and short WHALE average entry prices and how far current price is above/below each — the cost lines to watch for a second-entry (二段) or a defense zone.`,
+  },
+};
+
 // ── JSON-RPC handling ───────────────────────────────────────────────────────
 
 export async function handle(req: any): Promise<any | null> {
@@ -353,9 +373,23 @@ export async function handle(req: any): Promise<any | null> {
 
   switch (method) {
     case 'initialize':
-      return ok({ protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: SERVER_INFO });
+      return ok({ protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {}, prompts: {} }, serverInfo: SERVER_INFO });
     case 'notifications/initialized':
       return null; // notification, no response
+    case 'prompts/list':
+      return ok({
+        prompts: Object.entries(PROMPTS).map(([name, p]) => ({
+          name, description: p.description, arguments: p.arguments,
+        })),
+      });
+    case 'prompts/get': {
+      const p = req.params?.name && PROMPTS[req.params.name];
+      if (!p) return err(-32601, `Unknown prompt: ${req.params?.name}`);
+      return ok({
+        description: p.description,
+        messages: [{ role: 'user', content: { type: 'text', text: p.build(req.params?.arguments ?? {}) } }],
+      });
+    }
     case 'tools/list':
       return ok({
         tools: Object.entries(TOOLS).map(([name, t]) => ({

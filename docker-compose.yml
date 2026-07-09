@@ -1,11 +1,16 @@
-# One-command deploy for the altmonitor Telegram bot
-# (full-market price / OI / volume anomaly alerts).
+# One-command deploy for the whole stack:
+#   - altmonitor  : full-market price / OI / volume anomaly alerts → Telegram
+#   - tracker     : snapshots the smart-money watchlist into a shared SQLite DB
+#   - dashboard   : Express dashboard + JSON API over that DB (http://host:3001)
 #
-#   cp altmonitor/.env.example altmonitor/.env   # fill TG_BOT_TOKEN + TG_CHAT_ID
-#   docker compose up -d                          # build + run, auto-restarts
-#   docker compose logs -f                        # watch
+#   cp altmonitor/.env.example altmonitor/.env    # fill TG_BOT_TOKEN + TG_CHAT_ID (altmonitor only)
+#   export SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA  # coins for the tracker (or a root .env)
+#   docker compose up -d                          # build + run all, auto-restart
+#   docker compose logs -f
 #
-# state.json and alerts.db persist in the named volume across restarts.
+# tracker + dashboard share `smartmoney-data:/data`, and SMART_MONEY_DB_PATH points
+# both at the same file — so the dashboard/API always sees what the tracker wrote.
+# Run just one service, e.g.: docker compose up -d altmonitor
 services:
   altmonitor:
     build: ./altmonitor
@@ -14,5 +19,31 @@ services:
       - altmonitor-data:/data
     restart: unless-stopped
 
+  tracker:
+    build: .
+    command: ["npx", "tsx", "src/scripts/smart-money-tick.ts"]
+    environment:
+      SMART_MONEY_DB_PATH: /data/snapshots.db
+      # Set a watchlist for high-frequency tracking; empty = full market (needs a
+      # long interval — a full sweep is ~100 min, so keep INTERVAL_MIN high there).
+      SMART_MONEY_WATCHLIST: ${SMART_MONEY_WATCHLIST:-}
+      SMART_MONEY_INTERVAL_MIN: ${SMART_MONEY_INTERVAL_MIN:-120}
+    volumes:
+      - smartmoney-data:/data
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    command: ["npx", "tsx", "src/scripts/smart-money-dashboard.ts"]
+    environment:
+      SMART_MONEY_DB_PATH: /data/snapshots.db
+      PORT: "3001"
+    ports:
+      - "3001:3001"
+    volumes:
+      - smartmoney-data:/data
+    restart: unless-stopped
+
 volumes:
   altmonitor-data:
+  smartmoney-data:
