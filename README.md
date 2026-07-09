@@ -580,6 +580,15 @@ systemd unit are in [`altmonitor/README.md`](https://github.com/0xBennie/binance
 
 ---
 
+## Troubleshooting
+
+Full guide: **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**. The ones people hit most:
+
+- **A symbol returns `no data — may be unsupported` but the perp exists** → often just a transient `bapi` blip; **retry once**. If OI/funding for it work, it was a blip. Some low-volume perps genuinely have no Smart Signal whale data (OI/funding still work).
+- **Everything returns `temporarily rate-limited/blocked`** → the circuit breaker tripped (418/403); wait out the TTL in stderr, or run from a Binance-reachable region.
+- **`get_change` / `scan_extreme` / `render_chart` say "no data"** → they read the local `data/snapshots.db`; register the MCP server with an absolute `cwd` and run the tracker from that same dir. The 7 live tools need no DB.
+- **`npm publish` → `EOTP` / release workflow → `ENEEDAUTH`** → use an npm token with **"Bypass 2FA" checked** (or configure a Trusted Publisher); a plain token / passkey-2FA can't publish non-interactively.
+
 ## What's *not* in this repo
 
 - ❌ No trading. This is data only.
