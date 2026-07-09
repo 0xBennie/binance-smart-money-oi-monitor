@@ -32,6 +32,17 @@ import 'dotenv/config';
 import readline from 'node:readline';
 import { handle } from '../mcp-core.js';
 
+// Run bare in a terminal (not piped by an MCP client) it just waits on stdin,
+// which looks like a hang. Tell the user what this is instead of going silent.
+if (process.stdin.isTTY) {
+  process.stderr.write(
+    'binance-smart-money MCP server (stdio) — meant to be launched by an MCP client,\n' +
+    'not run by hand. It is now waiting for JSON-RPC on stdin. Register it, e.g.:\n' +
+    '  claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor\n' +
+    '(Ctrl-C to exit.)\n',
+  );
+}
+
 const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', async (line) => {
   const trimmed = line.trim();
