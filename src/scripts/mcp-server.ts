@@ -30,7 +30,32 @@
  */
 import 'dotenv/config';
 import readline from 'node:readline';
-import { handle } from '../mcp-core.js';
+import { handle, SERVER_INFO } from '../mcp-core.js';
+
+const argv = process.argv.slice(2);
+if (argv.includes('--version') || argv.includes('-v')) {
+  process.stdout.write(SERVER_INFO.version + '\n');
+  process.exit(0);
+}
+if (argv.includes('--help') || argv.includes('-h')) {
+  process.stdout.write(
+    `binance-smart-money-oi-monitor v${SERVER_INFO.version}\n\n` +
+    `This binary is an MCP stdio server. Register it with your AI client:\n` +
+    `  claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor\n\n` +
+    `Other commands (from a clone, via npm run):\n` +
+    `  npm run analyze <SYMBOL>   one-shot readable report for a coin\n` +
+    `  npm run panel <SYMBOL>     shareable dark-HTML Smart Money card\n` +
+    `  npm run track              tracker daemon (SMART_MONEY_WATCHLIST, _INTERVAL_MIN)\n` +
+    `  npm run change <SYM> [min] per-side added/reduced over N min (needs tracker)\n` +
+    `  npm run scan               market-wide most long/short-heavy (needs tracker)\n` +
+    `  npm run chart <SYMBOL>     long/short position + avg-entry time-series chart\n` +
+    `  npm run dashboard          Express dashboard + JSON API (PORT=3001)\n` +
+    `  npm run doctor             diagnose Binance reachability / DB / deps\n\n` +
+    `Env: SMART_MONEY_DB_PATH (shared db path), SMART_MONEY_WATCHLIST, SMART_MONEY_INTERVAL_MIN.\n` +
+    `Docs: https://github.com/0xBennie/binance-smart-money-oi-monitor\n`,
+  );
+  process.exit(0);
+}
 
 // Run bare in a terminal (not piped by an MCP client) it just waits on stdin,
 // which looks like a hang. Tell the user what this is instead of going silent.

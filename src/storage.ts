@@ -44,7 +44,11 @@ export interface SmartMoneyHistoryRow {
 }
 
 const RETENTION_DAYS = 30;
-const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'snapshots.db');
+// SMART_MONEY_DB_PATH lets the tracker and the MCP server / dashboard point at the
+// SAME db regardless of their working directory — otherwise each defaults to its
+// own cwd/data/snapshots.db and the time-series tools silently read an empty file.
+const DEFAULT_DB_PATH =
+  process.env.SMART_MONEY_DB_PATH || path.join(process.cwd(), 'data', 'snapshots.db');
 const SM_SELECT_COLS =
   `ts, long_short_ratio AS longShortRatio,
    long_traders AS longTraders, long_traders_qty AS longQty, long_traders_avg_entry_price AS longAvg,

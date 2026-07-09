@@ -337,7 +337,10 @@ SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA SMART_MONEY_INTERVAL_MIN=15 npm run track
 
 也可用 `watchlist.json`（`["BEAT","BIRB"]` 或 `{"symbols":[...]}`）代替环境变量。
 名单 ≤ ~70 个币可安全 15 分钟刷一轮（12 秒/币）；留空则全市场（要用更长间隔/分片）。
-写入 `data/snapshots.db`（保留 30 天）；用 Docker 时 `docker compose up -d` 直接把它当 daemon 跑。
+写入 `data/snapshots.db`（保留 30 天）。
+
+> **把 `SMART_MONEY_DB_PATH` 设成绝对路径**，让 tracker 和 MCP server / 看板读**同一个库**，
+> 否则各自回落到自己 `cwd/data/snapshots.db`，时序工具会静默读到空库。（docker compose 已帮你设好。）
 
 **2. 查攒下来的历史：**
 
@@ -349,6 +352,19 @@ npm run chart BEAT 24      # → beat-chart.html：多空持仓 + 均价 24h 时
 
 同样有库函数（`getChange`/`scanExtreme`/`buildChart`+`renderChartHtml`）和 MCP 工具
 （`get_change`/`scan_extreme`/`render_chart`）。持仓变化用 **qty（张数）而非 USD 名义** —— 避免把涨价误算成加仓。
+
+## CLI 命令速查
+
+从 clone 里 `npm run <命令>`（安装后的 bin 还支持 `--help` / `--version`）：
+
+| 命令 | 作用 |
+|---|---|
+| `npm run analyze <币>` | 一条命令出人话报告 |
+| `npm run panel <币>` | 可分享深色看板卡 |
+| `npm run doctor` | 自检：币安连通 / DB / 原生依赖 |
+| `npm run track` | tracker daemon（`SMART_MONEY_WATCHLIST`、`_INTERVAL_MIN`） |
+| `npm run change/scan/chart` | 时序（需 tracker 先跑） |
+| `npm run dashboard` · `mcp` | 看板+API · MCP server |
 
 ---
 
@@ -501,11 +517,13 @@ cd altmonitor && pip install -r requirements.txt && python setup.py
 python altmonitor/deploy.py        # 或在 setup.py 最后选"部署到我的服务器"
 ```
 
-Docker 一键部署（在仓库根目录）：
+Docker 一键部署（在仓库根目录）。`docker compose` 现在起**整套** —— altmonitor **+** tracker **+** 看板（后两者共享一个 DB 卷，看板/API 直接看到 tracker 写的数据）：
 
 ```bash
-cp altmonitor/.env.example altmonitor/.env   # 填 TG_BOT_TOKEN + TG_CHAT_ID
-docker compose up -d                          # 构建 + 运行，崩溃自动重启
+cp altmonitor/.env.example altmonitor/.env       # altmonitor: TG_BOT_TOKEN + TG_CHAT_ID
+export SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA      # tracker: 要采的币
+docker compose up -d                             # 构建 + 全起，崩溃自动重启
+docker compose up -d altmonitor                  # …或只起某一个
 ```
 
 或直接运行：

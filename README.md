@@ -377,8 +377,12 @@ SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA SMART_MONEY_INTERVAL_MIN=15 npm run track
 Or a `watchlist.json` (`["BEAT","BIRB"]` or `{"symbols":[...]}`) instead of the env var.
 A watchlist of ≤ ~70 symbols refreshes safely every 15 min (12s/symbol spacing);
 leave the watchlist empty for the full market (then use a longer interval / sharding).
-It writes to `data/snapshots.db` (30-day retention) and, with Docker, `docker compose up -d`
-runs it as a daemon out of the box.
+It writes to `data/snapshots.db` (30-day retention).
+
+> **Set `SMART_MONEY_DB_PATH` to an absolute path** so the tracker and the MCP
+> server / dashboard read the *same* DB regardless of where each was started —
+> otherwise each falls back to its own `cwd/data/snapshots.db` and the time-series
+> tools quietly read an empty file. (`docker compose` sets this for you.)
 
 **2. Query the accumulated history:**
 
@@ -391,6 +395,38 @@ npm run chart BEAT 24      # → beat-chart.html: long/short position + avg entr
 Same three as library calls (`getChange`, `scanExtreme`, `buildChart`/`renderChartHtml`)
 and MCP tools (`get_change`, `scan_extreme`, `render_chart`). Position deltas use **qty
 (contract count), not USD** — so a price move isn't mistaken for a position change.
+
+---
+
+## CLI commands
+
+From a clone (`npm run <cmd>`). `binance-smart-money-oi-monitor --help` / `--version` also work on the installed bin.
+
+| Command | What |
+|---|---|
+| `npm run analyze <SYM>` | one-shot readable report for a coin (below) |
+| `npm run panel <SYM>` | shareable dark-HTML Smart Money card |
+| `npm run doctor` | diagnose Binance reachability / DB / native deps |
+| `npm run track` | tracker daemon (`SMART_MONEY_WATCHLIST`, `SMART_MONEY_INTERVAL_MIN`) |
+| `npm run change <SYM> [min]` · `scan` · `chart <SYM>` | time-series (need the tracker) |
+| `npm run dashboard` | Express dashboard + JSON API (`PORT=3001`) |
+| `npm run mcp` | MCP stdio server |
+
+`npm run analyze BEAT` prints:
+
+```
+  BEAT  聪明钱分析   现价 $0.11
+  ────────────────────────────────────────────────────
+  多空比(名义)   1.12  (均衡)     总持仓 $16.6M · 544 人
+
+                 多头 ▲                空头 ▼
+  交易员/大户     347 / 108        197 / 67
+  平均成本       2.556023       2.364990
+  现价 vs 成本   +4.3%          +12.6%
+  盈利占比       85%            24%
+  预估 PNL       +$986,948      -$1,448,646
+  …
+```
 
 ---
 
@@ -558,11 +594,15 @@ syncs code + `.env`, runs, and pings you on Telegram when live):
 python altmonitor/deploy.py        # or pick "deploy to my server" at the end of setup.py
 ```
 
-Or a one-command Docker deploy from the repo root:
+Or a one-command Docker deploy from the repo root. `docker compose` runs the
+**whole stack** — altmonitor **+** the tracker **+** the dashboard (the last two
+share one DB volume, so the dashboard/API sees what the tracker writes):
 
 ```bash
-cp altmonitor/.env.example altmonitor/.env   # fill TG_BOT_TOKEN + TG_CHAT_ID
-docker compose up -d                          # build + run, auto-restart
+cp altmonitor/.env.example altmonitor/.env       # altmonitor: TG_BOT_TOKEN + TG_CHAT_ID
+export SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA      # tracker: coins to snapshot
+docker compose up -d                             # build + run all, auto-restart
+docker compose up -d altmonitor                  # …or just one service
 ```
 
 Or run it directly:
