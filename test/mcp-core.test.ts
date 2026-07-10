@@ -16,10 +16,10 @@ test('tools/list exposes all five+ tools including render_panel and render_push'
   }
 });
 
-test('initialize reports serverInfo version 1.9.0', async () => {
+test('initialize reports serverInfo version 1.9.1', async () => {
   const resp: any = await handle({ jsonrpc: '2.0', id: 2, method: 'initialize' });
-  assert.equal(resp.result.serverInfo.version, '1.9.0');
-  assert.equal(SERVER_INFO.version, '1.9.0');
+  assert.equal(resp.result.serverInfo.version, '1.9.1');
+  assert.equal(SERVER_INFO.version, '1.9.1');
 });
 
 test('tools/call marks isError=true when a tool returns an error result', async () => {

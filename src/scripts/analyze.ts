@@ -5,7 +5,7 @@
  */
 import 'dotenv/config';
 import { buildPanel } from '../panel.js';
-import { fmtUsd, fmtPrice, fmtPct } from '../format-num.js';
+import { fmtUsd, fmtPrice, fmtPct, fmtChg } from '../format-num.js';
 
 const sym = process.argv[2];
 if (!sym) {
@@ -39,7 +39,8 @@ const lines = [
   `  预估 PNL       ${(L.pnlUsd == null ? '—' : fmtUsd(L.pnlUsd)).padEnd(14)} ${S.pnlUsd == null ? '—' : fmtUsd(S.pnlUsd)}`,
   ``,
   `  头部持仓 LSR   ${d.topPositionLsr ?? '—'}      Taker 买卖比 ${d.takerBsr ?? '—'}`,
-  `  SM 占全市场OI  ${fmtPct(d.smShareOfOI)}      总 OI ${fmtUsd(d.oiNowUsd)} (${d.oiChg4h == null ? '—' : (d.oiChg4h >= 0 ? '+' : '') + (d.oiChg4h * 100).toFixed(1) + '% 4h'})`,
+  // oiChg4h is ALREADY a percent (4.05 = 4.05%) — fmtChg, never ×100.
+  `  SM 占全市场OI  ${fmtPct(d.smShareOfOI)}      总 OI ${fmtUsd(d.oiNowUsd)} (${fmtChg(d.oiChg4h)} 4h)`,
   ``,
   `  仅供数据分析，不构成投资建议。`,
   ``,

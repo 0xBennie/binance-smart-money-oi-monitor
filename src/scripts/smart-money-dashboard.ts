@@ -187,7 +187,7 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
         <td>${fmtOiUsd(r.oi_now_usd)}</td>
         <td ${chgClass(r.oi_chg_1h)}>${fmtChg(r.oi_chg_1h)}</td>
         <td ${chgClass(r.oi_chg_4h)}>${fmtChg(r.oi_chg_4h)}</td>
-        <td>${r.smRatio == null ? '—' : fmtPct(r.smRatio * 100, 1)}</td>
+        <td>${r.smRatio == null ? '—' : fmtPct(r.smRatio, 1)}</td>
         <td>${verdict}</td>
         <td class="ts">${fmtTs(r.ts)}</td>
       </tr>`;
