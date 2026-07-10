@@ -2,6 +2,14 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.9.1
+
+Percent-unit fixes (the `oiChg*` fields are already percents; `smShareOfOI`-style ratios are 0..1 fractions — mixing the two up multiplies the display by 100).
+
+- `npm run analyze`: OI 4h change rendered ×100 too big (e.g. `+434.3%` instead of `+4.3%`) — now routed through `fmtChg`. The bug was masked in testing because Binance was unreachable and the field printed `—`.
+- Dashboard: the "SM share of OI" column double-multiplied (51.5% showed as `5150.0%`).
+- `.dockerignore` now excludes `.env` so local secrets can't be baked into image layers by `COPY . .`.
+
 ## 1.9.0
 
 User-experience pass.

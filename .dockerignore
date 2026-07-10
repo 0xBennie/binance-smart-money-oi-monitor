@@ -6,3 +6,6 @@ data
 altmonitor
 *-panel.html
 *-chart.html
+# never bake local secrets/config into image layers — compose injects env at runtime
+.env
+.env.*
