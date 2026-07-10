@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeChange } from '../src/tracking.js';
+import { computeChange, scanExtreme } from '../src/tracking.js';
 import { renderChartHtml } from '../src/chart.js';
+import { storage } from '../src/storage.js';
 import type { SmartMoneyHistoryRow } from '../src/storage.js';
 
 const row = (ts: number, lq: number, sq: number, la = 1, sa = 1): SmartMoneyHistoryRow => ({
@@ -46,4 +47,27 @@ test('renderChartHtml: self-contained html, no external assets', () => {
 test('renderChartHtml: graceful when too few points', () => {
   const html = renderChartHtml({ symbol: 'XUSDT', rows: [row(1, 1, 1)] });
   assert.match(html, /暂无足够/);
+});
+
+test('scanExtreme: mostLong and mostShort never share a symbol (small universe)', () => {
+  // 15-symbol synthetic set: universe (15) < 2*limit (20), the overlap case.
+  const now = Date.now();
+  const synthetic: SmartMoneyHistoryRow[] = Array.from({ length: 15 }, (_, i) => ({
+    symbol: `SYM${i}USDT`, ts: now, longShortRatio: i + 1,   // distinct LSRs 1..15
+    longTraders: 50, longQty: 100, longAvg: 1,
+    shortTraders: 50, shortQty: 100, shortAvg: 1,
+    longProfitTraders: 25, shortProfitTraders: 25, longWhales: 5, shortWhales: 5,
+  }));
+  const orig = storage.latestSmartMoney;
+  (storage as any).latestSmartMoney = () => synthetic;
+  try {
+    const res = scanExtreme({ limit: 10 }) as { mostLong: { symbol: string }[]; mostShort: { symbol: string }[] };
+    const longSet = new Set(res.mostLong.map((e) => e.symbol));
+    const shared = res.mostShort.filter((e) => longSet.has(e.symbol));
+    assert.equal(shared.length, 0, `mostLong/mostShort overlap: ${shared.map((e) => e.symbol).join(',')}`);
+    assert.equal(res.mostLong.length, 10);   // top 10 by LSR
+    assert.equal(res.mostShort.length, 5);   // remaining 15-10, no double-count
+  } finally {
+    (storage as any).latestSmartMoney = orig;
+  }
 });

@@ -5,9 +5,9 @@
  */
 import 'dotenv/config';
 import fs from 'node:fs';
-import path from 'node:path';
 import { preflightBinanceFapi, isBinanceApiBlocked } from '../binance-rate-limit.js';
 import { getSmartMoneyOverview } from '../binance-smart-money.js';
+import { resolveDbPath } from '../storage.js';
 
 const OK = '✅', BAD = '❌', WARN = '⚠️ ';
 const rows: string[] = [];
@@ -38,7 +38,7 @@ if (reachable) {
 }
 
 // 5. Local snapshot DB
-const dbPath = process.env.SMART_MONEY_DB_PATH || path.join(process.cwd(), 'data', 'snapshots.db');
+const dbPath = resolveDbPath();
 if (!fs.existsSync(dbPath)) {
   add(WARN, 'local DB', `${dbPath} not found — time-series tools (change/scan/chart) need the tracker (npm run track) first`);
 } else if (hasSqlite) {
@@ -52,6 +52,10 @@ if (!fs.existsSync(dbPath)) {
   } catch (e: any) {
     add(BAD, 'local DB', `unreadable: ${e?.message ?? e}`);
   }
+} else {
+  // DB file exists but the native reader isn't built — the exact case doctor
+  // should surface (before this, no db row printed at all).
+  add(WARN, 'local DB', `${dbPath} present but better-sqlite3 unavailable — can't read it (see TROUBLESHOOTING.md)`);
 }
 
 console.log('\n  binance-smart-money-oi-monitor — doctor\n');

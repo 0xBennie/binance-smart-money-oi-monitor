@@ -26,10 +26,9 @@
  */
 import 'dotenv/config';
 import { existsSync, readFileSync } from 'node:fs';
-import axios from 'axios';
 import { storage } from '../storage.js';
 import { getSmartMoneyOverviewBatch } from '../binance-smart-money.js';
-import { preflightBinanceFapi } from '../binance-rate-limit.js';
+import { preflightBinanceFapi, binanceHttp, updateBinanceUsedWeight } from '../binance-rate-limit.js';
 import { installGracefulShutdown } from '../cron-utils.js';
 import { normalizeSymbol } from '../symbol.js';
 
@@ -42,6 +41,12 @@ const INTERVAL_MIN = parseInt(process.env.SMART_MONEY_INTERVAL_MIN || '0', 10);
 
 const SPACING_MS = 12_000;
 const JITTER_MS = 3_000;
+
+// Cache the resolved full-market symbol list — a daemon full-market sweep would
+// otherwise re-download the entire exchangeInfo payload every interval. The set of
+// TRADING USDT perps changes slowly, so a 6h TTL is plenty.
+const EXCHANGE_INFO_TTL_MS = 6 * 3_600_000;
+let cachedPerps: { symbols: string[]; at: number } | null = null;
 
 /**
  * Explicit watchlist to track at high cadence: env SMART_MONEY_WATCHLIST
@@ -74,11 +79,18 @@ async function getAllUsdtPerpetuals(): Promise<string[]> {
     console.log(`[smart-money-tick] watchlist mode: ${watchlist.length} symbols`);
     return watchlist;
   }
+  // Full-market mode: reuse a recent resolved list instead of re-fetching every sweep.
+  if (cachedPerps && Date.now() - cachedPerps.at < EXCHANGE_INFO_TTL_MS) {
+    return cachedPerps.symbols;
+  }
   try {
-    const exInfo = await axios.get(
+    // Use the shared keep-alive pool (not bare axios) so this call rides the same
+    // socket pool + weight accounting as the rest of the client.
+    const exInfo = await binanceHttp.get(
       'https://fapi.binance.com/fapi/v1/exchangeInfo',
       { timeout: 10_000 }
     );
+    updateBinanceUsedWeight(exInfo.headers['x-mbx-used-weight-1m'] as string | undefined);
     let list: string[] = (exInfo.data.symbols || [])
       .filter((s: any) =>
         s.status === 'TRADING' &&
@@ -96,6 +108,7 @@ async function getAllUsdtPerpetuals(): Promise<string[]> {
       list = list.filter((_, i) => i % SHARD_TOTAL === SHARD_INDEX);
     }
 
+    if (list.length) cachedPerps = { symbols: list, at: Date.now() };   // don't cache an empty/garbage payload
     return list;
   } catch (e: any) {
     console.warn(`[smart-money-tick] exchangeInfo failed (${e?.response?.status || e.message})`);
@@ -176,6 +189,9 @@ async function main(): Promise<void> {
     while (true) {
       const start = Date.now();
       try { await runOnce(); } catch (e: any) { console.error('[smart-money-tick] sweep error:', e?.message ?? e); }
+      // Long-lived daemon: checkpoint the WAL after each sweep so a SIGKILL/OOM
+      // mid-write can't strand an uncheckpointed WAL. Cheap (TRUNCATE).
+      try { storage.checkpoint(); } catch (e: any) { console.warn('[smart-money-tick] checkpoint failed:', e?.message ?? e); }
       const waitMs = Math.max(5_000, INTERVAL_MIN * 60_000 - (Date.now() - start));
       await sleep(waitMs);
     }
