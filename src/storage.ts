@@ -1,9 +1,23 @@
 // Minimal SQLite manager for Smart Money + Top Trader snapshots.
 // Single file, two tables, 30-day retention, no external deps beyond better-sqlite3.
 
-import Database from 'better-sqlite3';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
+// Type-only import: erased at compile time, so it does NOT load the native module.
+import type Database from 'better-sqlite3';
+
+// better-sqlite3 is a NATIVE module and an *optional* dependency. Importing it at
+// module load time would eagerly load the addon the moment anything re-exports
+// storage (src/index.ts does), crashing library consumers whose optional build
+// failed — even if they only call live (non-DB) functions. So load it LAZILY, on
+// the FIRST DB op only, and cache the constructor.
+const require = createRequire(import.meta.url);
+let DatabaseCtor: typeof Database | null = null;
+function loadDatabase(): typeof Database {
+  if (!DatabaseCtor) DatabaseCtor = require('better-sqlite3') as typeof Database;
+  return DatabaseCtor;
+}
 
 export interface SmartMoneySnapshotRow {
   symbol: string; ts: number;
@@ -47,8 +61,12 @@ const RETENTION_DAYS = 30;
 // SMART_MONEY_DB_PATH lets the tracker and the MCP server / dashboard point at the
 // SAME db regardless of their working directory — otherwise each defaults to its
 // own cwd/data/snapshots.db and the time-series tools silently read an empty file.
-const DEFAULT_DB_PATH =
-  process.env.SMART_MONEY_DB_PATH || path.join(process.cwd(), 'data', 'snapshots.db');
+//
+// Resolved at CALL time (not module-load time): a library consumer that imports
+// storage BEFORE its dotenv runs would otherwise bind the wrong path forever.
+export function resolveDbPath(): string {
+  return process.env.SMART_MONEY_DB_PATH || path.join(process.cwd(), 'data', 'snapshots.db');
+}
 const SM_SELECT_COLS =
   `ts, long_short_ratio AS longShortRatio,
    long_traders AS longTraders, long_traders_qty AS longQty, long_traders_avg_entry_price AS longAvg,
@@ -62,15 +80,17 @@ class Storage {
   private stmtInsertTopTrader!: Database.Statement;
   private stmtInsertOI!: Database.Statement;
 
-  init(dbPath = DEFAULT_DB_PATH): void {
+  init(dbPath?: string): void {
     if (this.db) return;
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath);
+    const p = dbPath ?? resolveDbPath();
+    const Database = loadDatabase();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    this.db = new Database(p);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = NORMAL');
     this.createTables();
     this.prepareStmts();
-    console.log(`[Storage] initialized: ${dbPath}`);
+    console.log(`[Storage] initialized: ${p}`);
   }
 
   private createTables(): void {
@@ -177,15 +197,24 @@ class Storage {
     return { smartMoney: sm.changes, topTrader: tt.changes, oi: oi.changes };
   }
 
+  /** Force a WAL checkpoint (TRUNCATE) so a SIGKILL/OOM mid-write can't leave an
+   * uncheckpointed WAL. No-op when the DB isn't open. */
+  checkpoint(): void {
+    this.db?.pragma('wal_checkpoint(TRUNCATE)');
+  }
+
   /** Read-only handle for dashboards / queries. */
-  getDbReadonly(dbPath = DEFAULT_DB_PATH): Database.Database {
-    return new Database(dbPath, { readonly: true });
+  getDbReadonly(dbPath?: string): Database.Database {
+    const Database = loadDatabase();
+    return new Database(dbPath ?? resolveDbPath(), { readonly: true });
   }
 
   /** Smart-money snapshots for one symbol since `sinceMs`, oldest first. */
-  smartMoneyHistory(symbol: string, sinceMs: number, dbPath = DEFAULT_DB_PATH): SmartMoneyHistoryRow[] {
-    if (!fs.existsSync(dbPath)) return [];   // no local DB yet (e.g. ephemeral npx run)
-    const db = new Database(dbPath, { readonly: true });
+  smartMoneyHistory(symbol: string, sinceMs: number, dbPath?: string): SmartMoneyHistoryRow[] {
+    const p = dbPath ?? resolveDbPath();
+    if (!fs.existsSync(p)) return [];   // no local DB yet (e.g. ephemeral npx run)
+    const Database = loadDatabase();
+    const db = new Database(p, { readonly: true });
     try {
       return db.prepare(
         `SELECT ${SM_SELECT_COLS} FROM ob_smart_money_snapshots
@@ -195,9 +224,11 @@ class Storage {
   }
 
   /** Latest snapshot per symbol — for market-wide ranking / scans. */
-  latestSmartMoney(dbPath = DEFAULT_DB_PATH): SmartMoneyHistoryRow[] {
-    if (!fs.existsSync(dbPath)) return [];   // no local DB yet
-    const db = new Database(dbPath, { readonly: true });
+  latestSmartMoney(dbPath?: string): SmartMoneyHistoryRow[] {
+    const p = dbPath ?? resolveDbPath();
+    if (!fs.existsSync(p)) return [];   // no local DB yet
+    const Database = loadDatabase();
+    const db = new Database(p, { readonly: true });
     try {
       return db.prepare(
         `SELECT s.symbol AS symbol, s.ts AS ts, s.long_short_ratio AS longShortRatio,

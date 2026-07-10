@@ -90,9 +90,16 @@ export function scanExtreme(opts: { limit?: number; maxAgeMin?: number; minTrade
     ageMin: Math.round((now - row.ts) / 60_000),
   });
   const sorted = [...rows].sort((a, b) => b.longShortRatio - a.longShortRatio);
+  // mostLong (top of the sort) and mostShort (bottom) must NEVER share a symbol.
+  // `slice(-limit)` overlaps `slice(0,limit)` whenever rows.length <= 2*limit (the
+  // usual case: watchlist ~11-19, default limit 10). Cut mostShort to start after
+  // whatever mostLong already claimed. (Tiny DB → mostShort empty, acceptable.)
+  const longCut = Math.min(limit, sorted.length);
+  const mostLong = sorted.slice(0, longCut).map(map);                            // highest LSR = most long-heavy
+  const mostShort = sorted.slice(Math.max(longCut, sorted.length - limit)).reverse().map(map); // lowest LSR = most short-heavy
   return {
     scanned: rows.length,
-    mostLong: sorted.slice(0, limit).map(map),                     // highest LSR = most long-heavy
-    mostShort: sorted.slice(-limit).reverse().map(map),            // lowest LSR = most short-heavy
+    mostLong,
+    mostShort,
   };
 }

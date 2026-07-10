@@ -47,8 +47,12 @@ function panel(
   fmt: (v: number) => string,
 ): string {
   const t0 = rows[0]!.ts, t1 = rows[rows.length - 1]!.ts;
-  const vals = rows.flatMap((r) => [longVal(r), shortVal(r)]).filter((v) => Number.isFinite(v) && v > 0);
-  const vmin = Math.min(...vals), vmax = Math.max(...vals);
+  // Include legit 0-qty points (a side can be flat 0 at some ticks) — only drop
+  // non-finite values. Filtering v>0 pushed zero points far off-box.
+  const vals = rows.flatMap((r) => [longVal(r), shortVal(r)]).filter((v) => Number.isFinite(v));
+  // Empty vals → Math.min(...[]) is Infinity → NaN coords/labels. Use safe flat defaults.
+  const vmin = vals.length ? Math.min(...vals) : 0;
+  const vmax = vals.length ? Math.max(...vals) : 1;
   const pad = (vmax - vmin) * 0.08 || vmax * 0.08 || 1;
   const lo = Math.max(0, vmin - pad), hi = vmax + pad;
   const longPts = points(rows, longVal, t0, t1, lo, hi, topY);

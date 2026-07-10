@@ -71,6 +71,12 @@ import { capSet } from './cache.js';
 interface CachedOverview { snap: SmartMoneyOverview; fetchedAt: number; }
 const cache = new Map<string, CachedOverview>();
 
+// Negative cache: a symbol with no Smart Signal data returns a definitive empty
+// EVERY sweep, and without a tombstone it re-does 2 requests + a 400ms wait each
+// time. Remember the empty for a short TTL and return null immediately within it.
+const NEG_TTL_MS = 120_000;
+const negCache = new Map<string, number>();   // symbol → tombstone time (ms)
+
 function parse(symbol: string, raw: any): SmartMoneyOverview | null {
   if (!raw || typeof raw !== 'object') return null;
   const num = (v: any): number => {
@@ -111,12 +117,21 @@ export async function getSmartMoneyOverview(
 
   if (isBinanceApiBlocked()) return cached?.snap ?? null;
 
+  // Return the recent empty immediately — skips 2 requests + 400ms for a data-less
+  // symbol on every sweep within the TTL.
+  const negAt = negCache.get(symbol);
+  if (negAt !== undefined && Date.now() - negAt < NEG_TTL_MS) return null;
+
+  // Weight-headroom wait belongs ONCE per call, not per attempt — the retry below
+  // is a same-window blip retry, not a fresh budget request.
+  await waitForBinanceWeightHeadroom();
+
   // The bapi Smart Money endpoint occasionally returns an empty body for a symbol
   // that DOES have data (a transient blip — see POWER). Retry once before giving
   // up, so a blip isn't mistaken for "symbol unsupported". On a real block, stop
   // immediately (never retry-loop a 418).
+  let sawDefinitiveEmpty = false;   // successful HTTP + valid JSON but no usable data
   for (let attempt = 0; attempt < 2; attempt++) {
-    await waitForBinanceWeightHeadroom();
     try {
       const resp = await binanceHttp.get(SMART_MONEY_URL, {
         params: { symbol },
@@ -129,12 +144,17 @@ export async function getSmartMoneyOverview(
         const snap = parse(symbol, data.data);
         if (snap) {
           capSet(cache, symbol, { snap, fetchedAt: Date.now() });
+          negCache.delete(symbol);   // clear any stale tombstone — it has data now
           return snap;
         }
       }
+      // The request itself succeeded; the body just carried no data for this symbol.
+      sawDefinitiveEmpty = true;
       // empty / unparseable → brief pause, then one retry
       if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
     } catch (error) {
+      // A network error / block is NOT a definitive empty — don't tombstone it.
+      sawDefinitiveEmpty = false;
       const { sev, retryAfterSec } = detectBinanceBlockDetails(error);
       if (sev) {
         markBinanceApiBlockedWithRetry(sev, retryAfterSec);
@@ -143,6 +163,9 @@ export async function getSmartMoneyOverview(
       if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
     }
   }
+  // Tombstone only a definitive empty that persisted through the retry, so the
+  // same data-less symbol returns null instantly for the next NEG_TTL_MS.
+  if (sawDefinitiveEmpty) capSet(negCache, symbol, Date.now());
   return cached?.snap ?? null;
 }
 
