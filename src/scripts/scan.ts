@@ -5,9 +5,16 @@
  */
 import 'dotenv/config';
 import { scanExtreme } from '../tracking.js';
+import { dbErrorHint } from '../storage.js';
 
 const limit = Number(process.argv[2]) > 0 ? Number(process.argv[2]) : 10;
-const res: any = scanExtreme({ limit });
+let res: any;
+try {
+  res = scanExtreme({ limit });
+} catch (e) {
+  console.error(dbErrorHint(e));
+  process.exit(1);
+}
 if ('error' in res) {
   console.error(res.error);
   process.exit(1);

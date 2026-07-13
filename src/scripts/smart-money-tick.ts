@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Smart Money overview snapshot cron entry point.
  *
@@ -116,21 +117,44 @@ async function getAllUsdtPerpetuals(): Promise<string[]> {
   }
 }
 
-/** One full sweep (assumes storage is already initialized). */
-async function runOnce(): Promise<void> {
+/** Fetch the whole fapi mark-price table in ONE request → symbol→price map, so
+ * each snapshot can store the price at capture (needed for the 现价 vs 庄家均价
+ * chart panel). Best-effort: on failure returns an empty map (price → null). */
+async function fetchPriceMap(): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  try {
+    const resp = await binanceHttp.get('https://fapi.binance.com/fapi/v1/ticker/price', { timeout: 10_000 });
+    updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
+    for (const t of (resp.data as any[]) || []) {
+      const p = parseFloat(t.price);
+      if (t.symbol && Number.isFinite(p)) map.set(t.symbol, p);
+    }
+  } catch (e: any) {
+    console.warn(`[smart-money-tick] price fetch failed (${e?.response?.status || e.message}) — snapshots store price=null this sweep`);
+  }
+  return map;
+}
+
+// Daemon liveness: count consecutive sweeps that wrote 0 snapshots so a stuck
+// state (permanent block / dead proxy) is visible in logs instead of looping
+// silently while the supervisor still sees the process "online".
+let unproductiveSweeps = 0;
+
+/** One full sweep (assumes storage is already initialized). Returns rows written. */
+async function runOnce(): Promise<number> {
   const startedAt = Date.now();
 
   // Preflight: fapi ping, fail-fast on 418/403 — do not slam a blocked IP
   const healthy = await preflightBinanceFapi();
   if (!healthy) {
     console.log('[smart-money-tick] preflight failed, skip this sweep');
-    return;
+    return 0;
   }
 
   const pool = await getAllUsdtPerpetuals();
   if (pool.length === 0) {
     console.log('[smart-money-tick] no symbols, skip');
-    return;
+    return 0;
   }
 
   const shardTag = SHARD_TOTAL > 1 ? ` shard=${SHARD_INDEX}/${SHARD_TOTAL}` : '';
@@ -157,12 +181,19 @@ async function runOnce(): Promise<void> {
     );
   }
 
+  // One batch price pull (all symbols, 1 request) so each snapshot records the
+  // mark price at capture time for the 现价 vs 庄家均价 chart panel.
+  const priceMap = await fetchPriceMap();
+
   // Write each snapshot the moment it lands — a mid-run crash/418 then keeps
   // everything captured so far instead of discarding the whole batch.
+  // force=true: bypass the 10-min positive cache so every sweep gets a fresh ts
+  // (a cache hit would rewrite the same (symbol, ts) row and collapse the series).
   let written = 0;
   const snapshots = await getSmartMoneyOverviewBatch(
     pool, SPACING_MS, JITTER_MS,
-    (_sym, snap) => { storage.recordSmartMoney(snap); written++; }
+    (sym, snap) => { storage.recordSmartMoney({ ...snap, price: priceMap.get(sym) ?? null }); written++; },
+    true
   );
 
   // Opportunistic cleanup (cheap, single DELETE)
@@ -173,6 +204,7 @@ async function runOnce(): Promise<void> {
     `[smart-money-tick] done${shardTag} requested=${pool.length} captured=${snapshots.size} ` +
     `written=${written} cleaned(sm/tt/oi)=${cleaned.smartMoney}/${cleaned.topTrader}/${cleaned.oi} elapsed=${elapsedS.toFixed(1)}s`
   );
+  return written;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -188,7 +220,18 @@ async function main(): Promise<void> {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const start = Date.now();
-      try { await runOnce(); } catch (e: any) { console.error('[smart-money-tick] sweep error:', e?.message ?? e); }
+      let wrote = 0;
+      try { wrote = await runOnce(); } catch (e: any) { console.error('[smart-money-tick] sweep error:', e?.message ?? e); }
+      // Liveness signal: a permanently blocked IP / dead proxy loops forever writing
+      // nothing while the supervisor still shows "online". Escalate to ERROR after 3
+      // consecutive empty sweeps so ops can tell "stuck" from "healthy and idle".
+      if (wrote > 0) { unproductiveSweeps = 0; }
+      else if (++unproductiveSweeps >= 3) {
+        console.error(
+          `[smart-money-tick] ⚠️ STUCK: ${unproductiveSweeps} consecutive sweeps wrote 0 snapshots ` +
+          `(~${unproductiveSweeps * INTERVAL_MIN}min no new data). Likely a blocked IP / dead proxy / geo-restriction — check HTTPS_PROXY & circuit breaker.`
+        );
+      }
       // Long-lived daemon: checkpoint the WAL after each sweep so a SIGKILL/OOM
       // mid-write can't strand an uncheckpointed WAL. Cheap (TRUNCATE).
       try { storage.checkpoint(); } catch (e: any) { console.warn('[smart-money-tick] checkpoint failed:', e?.message ?? e); }

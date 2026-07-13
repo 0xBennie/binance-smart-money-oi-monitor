@@ -38,9 +38,11 @@ behind the scenes:
 https://www.binance.com/bapi/futures/v1/public/future/smart-money/signal/overview?symbol=BTCUSDT
 ```
 
-No API key required. No proxy required (works directly from most VPS regions).
-But Binance enforces an undocumented per-IP weight budget, and a single careless
-burst can cost you a 4-hour `Retry-After`. This repo solves that.
+No API key required. Works directly from most VPS regions — and if yours is
+geo-restricted, set `HTTPS_PROXY=http://host:port` to route the Binance calls
+through a proxy/VPS (added 1.9.3). But Binance enforces an undocumented per-IP
+weight budget, and a single careless burst can cost you a 4-hour `Retry-After`.
+This repo solves that.
 
 ---
 
@@ -92,7 +94,7 @@ shorts entered too late and are about to get squeezed.
 └─────────────────┘  │                                       │  • Node import           │
 ┌─────────────────┐  │ writes snapshots                      │      import { … }        │
 │ top-trader-tick │──┤                                       │  • MCP server            │
-└─────────────────┘  │                                       │      (stdio, 7 tools)    │
+└─────────────────┘  │                                       │      (stdio, 10 tools)   │
 ┌─────────────────┐  │                                       │  • panel HTML            │
 │ oi-tick         │──┘                                       │      (render_panel)      │
 └─────────────────┘  │                                       └──────────────────────────┘
@@ -115,7 +117,7 @@ shorts entered too late and are about to get squeezed.
   one sqlite file (two/three tables, 30-day retention), served by one
   server-side-rendered Express dashboard + JSON API (no JS framework).
 - **Track B** (live, **no DB**): the same library core is consumed directly —
-  as a **Node import**, over the **MCP server** (stdio, 7 tools), or via the
+  as a **Node import**, over the **MCP server** (stdio, 10 tools — 7 live, 3 read the local DB), or via the
   **panel HTML** (`render_panel`). Each call hits Binance live and needs **no
   cron and no database**.
 - **Shared core**: both tracks call `getSmartMoneyOverview` /
@@ -182,6 +184,8 @@ npx tsx src/scripts/top-trader-tick.ts
 | `TOP_TRADER_POOL_MAX` / `_SHARD_INDEX` / `_SHARD_TOTAL` | same | Same semantics for top-trader cron |
 | `OI_POOL_MAX` / `_SHARD_INDEX` / `_SHARD_TOTAL` | same | Same for open-interest cron |
 | `SMART_MONEY_DASHBOARD_PORT` / `PORT` | `3001` | Dashboard listen port |
+| `HTTPS_PROXY` / `HTTP_PROXY` | *(none)* | Route **all** Binance calls through this proxy (e.g. `http://host:port`) — for geo-restricted regions. Direct connection when unset (added 1.9.3) |
+| `NO_PROXY` | *(none)* | Comma-separated hosts to bypass the proxy for (standard `NO_PROXY` semantics) |
 
 ### As a library
 
@@ -287,8 +291,10 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 ```
 
 `npx` downloads the package, runs the `binance-smart-money-oi-monitor` bin (the MCP
-server), and your AI gets the seven tools below. The server is pure stdio JSON-RPC
-and pulls in no native modules (no `better-sqlite3`/`express` at runtime).
+server), and your AI gets the 10 tools below (7 live + 3 that read the local tracker
+DB). The server is pure stdio JSON-RPC and loads **no** native module until you call
+a DB-backed tool (`get_change` / `scan_extreme` / `render_chart`) — the seven live
+tools stay native-free (no `better-sqlite3`/`express` loaded).
 
 <details>
 <summary>Running from a clone instead (no npm publish needed)</summary>
@@ -383,6 +389,20 @@ It writes to `data/snapshots.db` (30-day retention).
 > server / dashboard read the *same* DB regardless of where each was started —
 > otherwise each falls back to its own `cwd/data/snapshots.db` and the time-series
 > tools quietly read an empty file. (`docker compose` sets this for you.)
+
+> **Installed via npm (not a clone)?** The `bin` only launches the MCP server, and
+> `npm run track` only exists inside a clone. To run the tracker from an installed
+> package, invoke the built script directly:
+>
+> ```bash
+> SMART_MONEY_WATCHLIST=BEAT,BILL \
+> SMART_MONEY_DB_PATH=/abs/path/snapshots.db \
+> SMART_MONEY_INTERVAL_MIN=15 \
+> node node_modules/binance-smart-money-oi-monitor/dist/scripts/smart-money-tick.js
+> ```
+>
+> `get_change` / `scan_extreme` / `render_chart` stay empty until this runs against
+> the **same** `SMART_MONEY_DB_PATH` the MCP server uses.
 
 **2. Query the accumulated history:**
 
@@ -626,15 +646,17 @@ Full guide: **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**. The ones people hit mo
 
 - **A symbol returns `no data — may be unsupported` but the perp exists** → often just a transient `bapi` blip; **retry once**. If OI/funding for it work, it was a blip. Some low-volume perps genuinely have no Smart Signal whale data (OI/funding still work).
 - **Everything returns `temporarily rate-limited/blocked`** → the circuit breaker tripped (418/403); wait out the TTL in stderr, or run from a Binance-reachable region.
-- **`get_change` / `scan_extreme` / `render_chart` say "no data"** → they read the local `data/snapshots.db`; register the MCP server with an absolute `cwd` and run the tracker from that same dir. The 7 live tools need no DB.
+- **`get_change` / `scan_extreme` / `render_chart` say "no data"** → they read the local `data/snapshots.db`; register the MCP server with an absolute `cwd` and run the tracker from that same dir. The other seven (live) tools need no DB.
 - **`npm publish` → `EOTP` / release workflow → `ENEEDAUTH`** → use an npm token with **"Bypass 2FA" checked** (or configure a Trusted Publisher); a plain token / passkey-2FA can't publish non-interactively.
 
 ## What's *not* in this repo
 
 - ❌ No trading. This is data only.
-- ❌ No proxy. If your IP gets a hard 403 (CloudFront WAF), the only fix is
-  to wait it out or change IP. The whole point of the protection layers is
-  to never get there.
+- ✅ **Proxy _is_ supported** (since 1.9.3). Set `HTTPS_PROXY=http://host:port`
+  (and optionally `NO_PROXY`) to tunnel the Binance calls through a proxy/VPS —
+  handy from geo-restricted regions. If your IP still hits a hard 403 (CloudFront
+  WAF), wait it out or switch IP/proxy; the protection layers exist to avoid ever
+  getting there.
 - ❌ No on-chain data, no order book, no aggregated trades. For that, see
   the projects in *Credits*.
 

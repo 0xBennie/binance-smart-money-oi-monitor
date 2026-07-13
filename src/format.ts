@@ -16,8 +16,8 @@ export interface FormatterInput {
   oi: OpenInterestSnapshot;
   // Optional ticker fields. If null/undefined we render "—" in place.
   price?: number;                     // last/mark price; if absent we derive from oi
-  change24hPct?: number;              // already in %, e.g. +19.14
-  vol24hUsd?: number;
+  change24hPct?: number | null;       // already in %, e.g. +19.14 (null = malformed → "—")
+  vol24hUsd?: number | null;
   fundingRate?: number;               // decimal, e.g. 0.00005
   fundingCountdown?: string;          // "00:27:08"
 }
@@ -84,8 +84,10 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
   const shortUsd = haveMarkPrice ? sm.shortWhalesQty * markPrice : NaN;
   const totalWhalePosUsd = haveMarkPrice ? longUsd + shortUsd : NaN;
   // null = "undefined" (no shorts), not zero. Renders as "—".
+  // A RATIO (long÷short), not a percent — must match renderPanelHtml's plain
+  // `.toFixed(2)`. (Was ×100 + "%", i.e. 1.5 mislabeled as "150.00%".)
   const notionalRatio: number | null = (haveMarkPrice && shortUsd > 0)
-    ? (longUsd / shortUsd) * 100
+    ? (longUsd / shortUsd)
     : null;
   const whaleCount = sm.longWhales + sm.shortWhales;
 
@@ -122,7 +124,7 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
 
   // 巨鲸总览
   lines.push('🐋 <b>巨鲸总览</b>');
-  const ratioStr = notionalRatio == null ? '—' : `${notionalRatio.toFixed(2)}%`;
+  const ratioStr = notionalRatio == null ? '—' : notionalRatio.toFixed(2);
   lines.push(
     `<code>总持仓 ${fmtUsd(totalWhalePosUsd)}  •  鲸鱼 ${whaleCount}  •  名义多空比 ${ratioStr}</code>`
   );
