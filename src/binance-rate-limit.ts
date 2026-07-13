@@ -141,6 +141,7 @@ export async function waitForBinanceWeightHeadroom(): Promise<void> {
 import axios from 'axios';
 import https from 'node:https';
 import http from 'node:http';
+import { createRequire } from 'node:module';
 
 /**
  * Shared axios instance with HTTP keep-alive. Every client in this repo
@@ -153,8 +154,30 @@ import http from 'node:http';
  * WAF. Reusing one socket pool drops handshake cost to near-zero and
  * presents as a normal browser-style keep-alive client.
  */
+// Proxy support: geo-restricted users (doctor itself advises "use a proxy / VPS")
+// need requests to honor HTTP(S)_PROXY / NO_PROXY. axios's built-in env-proxy is
+// disabled the moment a custom keep-alive agent is set — so tunnel through the
+// proxy ourselves via a proxy agent when the env names one for the Binance host.
+// Falls back to a plain keep-alive agent (direct) when no proxy is configured.
+const _proxyReq = createRequire(import.meta.url);
+function makeHttpsAgent(): https.Agent {
+  try {
+    const { getProxyForUrl } = _proxyReq('proxy-from-env');
+    const proxyUrl: string = getProxyForUrl('https://fapi.binance.com');
+    if (proxyUrl) {
+      const mod = _proxyReq('https-proxy-agent');
+      const Ctor = mod.HttpsProxyAgent || mod.default || mod;   // v5 (module=ctor) & v7 ({HttpsProxyAgent})
+      return new Ctor(proxyUrl, { keepAlive: true, maxSockets: 8, maxFreeSockets: 4 });
+    }
+  } catch {
+    /* proxy libs missing → fall through to direct keep-alive agent */
+  }
+  return new https.Agent({ keepAlive: true, maxSockets: 8, maxFreeSockets: 4 });
+}
+
 export const binanceHttp = axios.create({
-  httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 8, maxFreeSockets: 4 }),
+  proxy: false,   // we handle proxying via the agent above; axios's own https-proxy is unreliable
+  httpsAgent: makeHttpsAgent(),
   httpAgent: new http.Agent({ keepAlive: true, maxSockets: 8, maxFreeSockets: 4 }),
 });
 
@@ -171,18 +194,28 @@ export async function preflightBinanceFapi(): Promise<boolean> {
     console.warn('[preflight] binance blocked in current process, skip');
     return false;
   }
-  try {
-    const resp = await binanceHttp.get('https://fapi.binance.com/fapi/v1/ping', { timeout: 5_000 });
-    updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
-    return true;
-  } catch (e: any) {
-    const { sev, retryAfterSec } = detectBinanceBlockDetails(e);
-    if (sev) {
-      markBinanceApiBlockedWithRetry(sev, retryAfterSec);
-      console.warn(`[preflight] FAILED sev=${sev} retryAfter=${retryAfterSec}s, abort`);
-    } else {
-      console.warn(`[preflight] FAILED: ${e.message}`);
+  // A transient network blip (socket hang up / ECONNRESET / timeout — common on
+  // the FIRST request behind a flaky proxy) should NOT skip the whole sweep on a
+  // single try. Retry transient errors a couple times; abort immediately only on
+  // a real WAF block (sev set) so we never retry-hammer a 418/403.
+  const MAX_ATTEMPTS = 3;
+  let lastMsg = '';
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const resp = await binanceHttp.get('https://fapi.binance.com/fapi/v1/ping', { timeout: 5_000 });
+      updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
+      return true;
+    } catch (e: any) {
+      const { sev, retryAfterSec } = detectBinanceBlockDetails(e);
+      if (sev) {
+        markBinanceApiBlockedWithRetry(sev, retryAfterSec);
+        console.warn(`[preflight] FAILED sev=${sev} retryAfter=${retryAfterSec}s, abort`);
+        return false;
+      }
+      lastMsg = e.message;
+      if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 600 * attempt));
     }
-    return false;
   }
+  console.warn(`[preflight] FAILED after ${MAX_ATTEMPTS} attempts: ${lastMsg}`);
+  return false;
 }
