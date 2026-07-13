@@ -2,6 +2,13 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.9.3
+
+Proxy support + preflight resilience — makes the tracker and live tools actually work in the geo-restricted setups the docs point at.
+
+- **HTTP(S) proxy support** — `binanceHttp` now honors `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY`, tunneling through a proxy agent when the env names one (and falling back to a direct keep-alive agent otherwise). Previously the custom keep-alive agent silently disabled axios's built-in env-proxy handling, so every request went direct — which made `doctor`'s own "use a proxy / VPS" advice impossible to actually follow from a restricted region. Adds `https-proxy-agent` as a dependency.
+- **Preflight retry** — `preflightBinanceFapi()` now retries a transient network blip (socket hang up / ECONNRESET / timeout — common on the first request behind a flaky proxy) up to 3× before declaring the region unreachable, instead of skipping the whole sweep on a single failure. A real WAF block (418 / 403 / 429) still aborts immediately without retry-hammering.
+
 ## 1.9.2
 
 Code-review fixes — robustness for library consumers, daemon efficiency, and chart/scan correctness.
