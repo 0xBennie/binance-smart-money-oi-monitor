@@ -199,6 +199,19 @@ async function runOnce(): Promise<number> {
   // Opportunistic cleanup (cheap, single DELETE)
   const cleaned = storage.cleanup();
 
+  // Opt-in alerts: only for a bounded watchlist, only when a TG token is configured
+  // (otherwise a no-op — never sends without the user's own bot token).
+  const alertList = resolveWatchlist();
+  if (alertList.length && process.env.SMART_MONEY_ALERT_TG_TOKEN) {
+    const { maybeAlert } = await import('../alerts.js');
+    for (const sym of alertList) {
+      try {
+        const r = await maybeAlert(sym);
+        if (r.fired && r.sent) console.log(`[smart-money-tick] alert sent: ${sym}`);
+      } catch (e: any) { console.warn(`[smart-money-tick] alert(${sym}) failed:`, e?.message ?? e); }
+    }
+  }
+
   const elapsedS = (Date.now() - startedAt) / 1000;
   console.log(
     `[smart-money-tick] done${shardTag} requested=${pool.length} captured=${snapshots.size} ` +

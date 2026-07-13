@@ -17,7 +17,7 @@ import { fundingCost } from './funding.js';
 import { isBinanceApiBlocked } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.9.4' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.10.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // Auto-attached to every analysis result. This tool reports on-chain/exchange data
 // and structure — it deliberately does NOT emit buy/sell or directional signals.
@@ -240,6 +240,18 @@ async function toolRenderChart(args: any) {
   }
 }
 
+async function toolGetProfitTrend(args: any) {
+  const symbol = normalizeSymbol(args.symbol);
+  if (!symbol) return { error: 'symbol is required' };
+  const minutes = Number(args.minutes) > 0 ? Number(args.minutes) : 60;
+  try {
+    const { getProfitTrend } = await import('./tracking.js');
+    return getProfitTrend(symbol, minutes);
+  } catch (e: any) {
+    return { symbol, error: `local DB unavailable (${e?.message ?? e}). ${DB_HINT}` };
+  }
+}
+
 export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; description: string; properties: any; required?: string[] }> = {
   get_smart_money: {
     fn: toolGetSmartMoney,
@@ -340,11 +352,25 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
   render_chart: {
     fn: toolRenderChart,
     description:
-      "Time-series chart of a symbol's smart-money long/short position (qty) and average entry over " +
-      "time, as a self-contained dark HTML page (inline SVG, no external assets). Reads the local DB.",
+      "Time-series chart of a symbol's smart-money positioning as a self-contained dark HTML page " +
+      "(inline SVG, no external assets): 3 line panels — long position (qty), short position (qty), " +
+      "and 庄家(whale) avg entry vs mark price (so you see whether whales are in profit or underwater). " +
+      "Each panel has its own y-scale. Reads the local DB.",
     properties: {
       symbol: { type: 'string', description: 'e.g. "BEAT" or "BEATUSDT"' },
       hours: { type: 'number', description: 'lookback window in hours (default 24)' },
+    },
+    required: ['symbol'],
+  },
+  get_profit_trend: {
+    fn: toolGetProfitTrend,
+    description:
+      "How the '% in profit' of each side (all smart-money traders AND whales) moved over the last N " +
+      "minutes, from the local DB. A side flipping from mostly-losing to mostly-winning (or vice-versa) " +
+      "is a shift the raw qty deltas don't show. Needs the tracker to have recorded ≥2 snapshots.",
+    properties: {
+      symbol: { type: 'string', description: 'e.g. "BEAT" or "BEATUSDT"' },
+      minutes: { type: 'number', description: 'lookback window in minutes (default 60)' },
     },
     required: ['symbol'],
   },

@@ -76,12 +76,19 @@ export { buildPush } from './push.js';
 export {
   computeChange,
   getChange,
+  getProfitTrend,
   scanExtreme,
   type SideChange,
+  type QtyDelta,
   type ChangeResult,
+  type ProfitTrend,
+  type ProfitSideTrend,
   type ExtremeEntry,
 } from './tracking.js';
 export type { SmartMoneyHistoryRow } from './storage.js';
 
 // Time-series chart (self-contained dark HTML + inline SVG).
 export { buildChart, renderChartHtml, type ChartData } from './chart.js';
+
+// Opt-in Telegram alerts (off unless SMART_MONEY_ALERT_TG_TOKEN + _CHAT_ID set).
+export { evaluateAlert, maybeAlert, type AlertResult } from './alerts.js';

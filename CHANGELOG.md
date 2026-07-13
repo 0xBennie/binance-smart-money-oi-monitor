@@ -2,6 +2,16 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.10.0
+
+New analysis features + a from-scratch guide. Tool count is now **11** (7 live + 4 DB-backed).
+
+- **Whale-level change** — `get_change` now breaks out a per-side `whale` delta (庄家 qty added/reduced) next to the all-traders delta, plus `price` + `whaleAvg` so you can read 现价-vs-庄家均价 P&L directly.
+- **Profit-ratio trend** — new `get_profit_trend` tool + `npm run trend <SYM> [min]` CLI: how each side's "% in profit" (traders AND whales) moved over N minutes — catches a flip from mostly-losing to mostly-winning that raw qty deltas miss.
+- **Opt-in Telegram alerts** — new `alerts` module (`evaluateAlert` / `maybeAlert`). Set `SMART_MONEY_ALERT_TG_TOKEN` + `SMART_MONEY_ALERT_TG_CHAT_ID` (optional `SMART_MONEY_ALERT_QTY_PCT`, default 5; `SMART_MONEY_ALERT_WINDOW_MIN`, default 30) and the tracker auto-pushes a Telegram alert when a watchlist symbol's smart-money qty moves past the threshold (with 现价 vs 庄家均价 context). Off by default — sends nothing without your own bot token.
+- **Multi-coin** — `SMART_MONEY_WATCHLIST` takes a comma list (`BEAT,BILL,MAGMA`); the tracker records all, and change/trend/chart/scan work per symbol. Documented in the guide.
+- **新手指南 `GUIDE.zh-CN.md`** — from-scratch: what all 11 tools do, both usage modes (zero-deploy MCP + clone/monitor + alerts), proxy setup, and a real BILL walk-through. Linked from both READMEs and shipped in the package.
+
 ## 1.9.4
 
 Positioning visualization + a sweep of correctness/security/doc fixes.

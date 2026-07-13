@@ -7,12 +7,19 @@ import { normalizeSymbol } from './symbol.js';
 
 const r2 = (n: number, p = 2) => Math.round(n * 10 ** p) / 10 ** p;
 
-export interface SideChange {
+export interface QtyDelta {
   fromQty: number; toQty: number;
   qtyChange: number;          // >0 added, <0 reduced (contracts)
   qtyChangePct: number | null;
+}
+
+export interface SideChange {
+  fromQty: number; toQty: number;
+  qtyChange: number;          // >0 added, <0 reduced (contracts) — ALL smart-money traders
+  qtyChangePct: number | null;
   fromAvg: number; toAvg: number;
   whaleAvg: number;           // latest 庄家(鲸鱼)均价 for this side — compare vs `price`
+  whale: QtyDelta;            // 庄家(鲸鱼)-only 张数变化 — "看庄家在加还是减"
 }
 
 export interface ChangeResult {
@@ -24,16 +31,20 @@ export interface ChangeResult {
 
 /** Pure: per-side delta between two snapshots. */
 export function computeChange(from: SmartMoneyHistoryRow, to: SmartMoneyHistoryRow): { long: SideChange; short: SideChange } {
-  const side = (fq: number, tq: number, fa: number, ta: number, wAvg: number): SideChange => ({
+  const delta = (fq: number, tq: number): QtyDelta => ({
     fromQty: fq, toQty: tq,
     qtyChange: tq - fq,
     qtyChangePct: fq > 0 ? r2(((tq - fq) / fq) * 100) : null,
+  });
+  const side = (fq: number, tq: number, fa: number, ta: number, wAvg: number, wfq: number, wtq: number): SideChange => ({
+    ...delta(fq, tq),
     fromAvg: fa, toAvg: ta,
     whaleAvg: wAvg,
+    whale: delta(wfq, wtq),
   });
   return {
-    long: side(from.longQty, to.longQty, from.longAvg, to.longAvg, to.longWhaleAvg),
-    short: side(from.shortQty, to.shortQty, from.shortAvg, to.shortAvg, to.shortWhaleAvg),
+    long: side(from.longQty, to.longQty, from.longAvg, to.longAvg, to.longWhaleAvg, from.longWhalesQty, to.longWhalesQty),
+    short: side(from.shortQty, to.shortQty, from.shortAvg, to.shortAvg, to.shortWhaleAvg, from.shortWhalesQty, to.shortWhalesQty),
   };
 }
 
@@ -61,6 +72,45 @@ export function getChange(symbol: string, minutes: number): ChangeResult | { sym
     price: to.price ?? null,
     long, short,
     verdict: `${word(long.qtyChange, '多头')}，${word(short.qtyChange, '空头')}`,
+  };
+}
+
+export interface ProfitSideTrend {
+  fromPct: number | null; toPct: number | null; change: number | null;         // % of traders in profit
+  whaleFromPct: number | null; whaleToPct: number | null; whaleChange: number | null; // % of whales in profit
+}
+export interface ProfitTrend {
+  symbol: string; fromTs: number; toTs: number; spanMinutes: number; samples: number;
+  long: ProfitSideTrend; short: ProfitSideTrend;
+  verdict: string;
+}
+
+/** How the "% in profit" of each side (traders + whales) moved over `minutes`.
+ * A side flipping from mostly-losing to mostly-winning (or vice-versa) is a
+ * meaningful shift the raw qty deltas don't show. */
+export function getProfitTrend(symbol: string, minutes: number): ProfitTrend | { symbol: string; error: string } {
+  const sym = normalizeSymbol(symbol);
+  const rows = storage.smartMoneyHistory(sym, Date.now() - minutes * 60_000 - 90_000);
+  if (rows.length < 2) {
+    return { symbol: sym, error: `not enough local history for ${sym} in the last ${minutes}m (need ≥2 snapshots).` };
+  }
+  const from = rows[0]!, to = rows[rows.length - 1]!;
+  const pct = (profit: number, total: number): number | null => (total > 0 ? Math.round((profit / total) * 100) : null);
+  const chg = (a: number | null, b: number | null): number | null => (a != null && b != null ? b - a : null);
+  const trend = (fp: number, ft: number, tp: number, tt: number, fwp: number, fw: number, twp: number, tw: number): ProfitSideTrend => {
+    const fromPct = pct(fp, ft), toPct = pct(tp, tt), whaleFromPct = pct(fwp, fw), whaleToPct = pct(twp, tw);
+    return { fromPct, toPct, change: chg(fromPct, toPct), whaleFromPct, whaleToPct, whaleChange: chg(whaleFromPct, whaleToPct) };
+  };
+  const long = trend(from.longProfitTraders, from.longTraders, to.longProfitTraders, to.longTraders,
+    from.longProfitWhales, from.longWhales, to.longProfitWhales, to.longWhales);
+  const short = trend(from.shortProfitTraders, from.shortTraders, to.shortProfitTraders, to.shortTraders,
+    from.shortProfitWhales, from.shortWhales, to.shortProfitWhales, to.shortWhales);
+  const w = (t: ProfitSideTrend, zh: string) =>
+    t.fromPct == null || t.toPct == null ? `${zh}盈利占比 —` : `${zh}盈利占比 ${t.fromPct}%→${t.toPct}%`;
+  return {
+    symbol: sym, fromTs: from.ts, toTs: to.ts,
+    spanMinutes: Math.round((to.ts - from.ts) / 60_000), samples: rows.length,
+    long, short, verdict: `${w(long, '多头')}，${w(short, '空头')}`,
   };
 }
 

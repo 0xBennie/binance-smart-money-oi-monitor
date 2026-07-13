@@ -55,7 +55,9 @@ export interface SmartMoneyHistoryRow {
   longTraders: number; longQty: number; longAvg: number;
   shortTraders: number; shortQty: number; shortAvg: number;
   longProfitTraders: number; shortProfitTraders: number;
+  longProfitWhales: number; shortProfitWhales: number;
   longWhales: number; shortWhales: number;
+  longWhalesQty: number; shortWhalesQty: number; // 庄家(鲸鱼)持仓张数 — for whale-level change
   longWhaleAvg: number; shortWhaleAvg: number;   // 庄家(鲸鱼)均价
   price: number | null;                          // mark price at capture (null on pre-1.9.4 rows)
 }
@@ -88,7 +90,9 @@ const SM_SELECT_COLS =
    long_traders AS longTraders, long_traders_qty AS longQty, long_traders_avg_entry_price AS longAvg,
    short_traders AS shortTraders, short_traders_qty AS shortQty, short_traders_avg_entry_price AS shortAvg,
    long_profit_traders AS longProfitTraders, short_profit_traders AS shortProfitTraders,
+   long_profit_whales AS longProfitWhales, short_profit_whales AS shortProfitWhales,
    long_whales AS longWhales, short_whales AS shortWhales,
+   long_whales_qty AS longWhalesQty, short_whales_qty AS shortWhalesQty,
    long_whales_avg_entry_price AS longWhaleAvg, short_whales_avg_entry_price AS shortWhaleAvg,
    price AS price`;
 
@@ -264,7 +268,9 @@ class Storage {
                 s.long_traders AS longTraders, s.long_traders_qty AS longQty, s.long_traders_avg_entry_price AS longAvg,
                 s.short_traders AS shortTraders, s.short_traders_qty AS shortQty, s.short_traders_avg_entry_price AS shortAvg,
                 s.long_profit_traders AS longProfitTraders, s.short_profit_traders AS shortProfitTraders,
+                s.long_profit_whales AS longProfitWhales, s.short_profit_whales AS shortProfitWhales,
                 s.long_whales AS longWhales, s.short_whales AS shortWhales,
+                s.long_whales_qty AS longWhalesQty, s.short_whales_qty AS shortWhalesQty,
                 s.long_whales_avg_entry_price AS longWhaleAvg, s.short_whales_avg_entry_price AS shortWhaleAvg,
                 s.price AS price
          FROM ob_smart_money_snapshots s

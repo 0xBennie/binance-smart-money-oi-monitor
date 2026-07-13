@@ -9,6 +9,8 @@
 **English** · [简体中文](README.zh-CN.md)
 
 > A **[Bennie Strategy](https://x.com/0xBenniee)** project · npm package `binance-smart-money-oi-monitor` · contact: [X/Twitter @0xBenniee](https://x.com/0xBenniee) · [Telegram @OxBennie](https://t.me/OxBennie)
+>
+> 🚀 **New here? Read the [新手指南 / Getting-Started Guide](GUIDE.zh-CN.md)** — what it does, how to use each mode, and a real BILL walk-through.
 
 ![Binance Smart Money panel — per-side whale positions, funding, self-contained shareable card](https://raw.githubusercontent.com/0xBennie/binance-smart-money-oi-monitor/main/docs/panel-preview.png)
 
@@ -94,7 +96,7 @@ shorts entered too late and are about to get squeezed.
 └─────────────────┘  │                                       │  • Node import           │
 ┌─────────────────┐  │ writes snapshots                      │      import { … }        │
 │ top-trader-tick │──┤                                       │  • MCP server            │
-└─────────────────┘  │                                       │      (stdio, 10 tools)   │
+└─────────────────┘  │                                       │      (stdio, 11 tools)   │
 ┌─────────────────┐  │                                       │  • panel HTML            │
 │ oi-tick         │──┘                                       │      (render_panel)      │
 └─────────────────┘  │                                       └──────────────────────────┘
@@ -117,7 +119,7 @@ shorts entered too late and are about to get squeezed.
   one sqlite file (two/three tables, 30-day retention), served by one
   server-side-rendered Express dashboard + JSON API (no JS framework).
 - **Track B** (live, **no DB**): the same library core is consumed directly —
-  as a **Node import**, over the **MCP server** (stdio, 10 tools — 7 live, 3 read the local DB), or via the
+  as a **Node import**, over the **MCP server** (stdio, 11 tools — 7 live, 4 read the local DB), or via the
   **panel HTML** (`render_panel`). Each call hits Binance live and needs **no
   cron and no database**.
 - **Shared core**: both tracks call `getSmartMoneyOverview` /
@@ -291,7 +293,7 @@ claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
 ```
 
 `npx` downloads the package, runs the `binance-smart-money-oi-monitor` bin (the MCP
-server), and your AI gets the 10 tools below (7 live + 3 that read the local tracker
+server), and your AI gets the 11 tools below (7 live + 4 that read the local tracker
 DB). The server is pure stdio JSON-RPC and loads **no** native module until you call
 a DB-backed tool (`get_change` / `scan_extreme` / `render_chart`) — the seven live
 tools stay native-free (no `better-sqlite3`/`express` loaded).
@@ -327,7 +329,8 @@ or just `npm run mcp` to launch the stdio server in the foreground.
 | `render_push` | `symbol` | Telegram `巨鲸总览` card as a `parse_mode:HTML` message body — the compact card to send straight to a chat (vs `render_panel`'s full standalone page) |
 | `get_change` | `symbol`, `minutes?` | How much each side **added/reduced** over the last N min (qty, not USD) — from the local DB; needs the tracker running |
 | `scan_extreme` | `limit?`, `maxAgeMin?` | Market-wide **most long-heavy / most short-heavy** symbols by smart-money LSR — from the local DB |
-| `render_chart` | `symbol`, `hours?` | Time-series **dark-HTML chart** of long/short position (qty) + avg entry over time — from the local DB |
+| `render_chart` | `symbol`, `hours?` | Time-series **dark-HTML chart** — 3 line panels: long position (qty), short position (qty), and 庄家(whale) avg entry vs mark price — from the local DB |
+| `get_profit_trend` | `symbol`, `minutes?` | How each side's **% in profit** (traders + whales) moved over N min — catches a flip from mostly-losing to mostly-winning; from the local DB |
 
 The last three read the **local snapshot DB** (see [Track over time](#track-over-time-local-db)); the rest hit Binance live and need no DB.
 
