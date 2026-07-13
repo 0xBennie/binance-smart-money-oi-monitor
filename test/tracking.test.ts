@@ -38,7 +38,7 @@ test('renderChartHtml: self-contained html, no external assets', () => {
   assert.match(html, /<!doctype html>/i);
   assert.match(html, /BEAT/);
   assert.match(html, /<svg/);
-  assert.match(html, /持仓量/);
+  assert.match(html, /多头持仓/);
   // no external asset loads (the only http(s) allowed is the SVG xmlns namespace)
   assert.ok(!/(?:src|href)\s*=\s*["']https?:/i.test(html), 'no external src/href');
   assert.ok(!/url\(\s*['"]?https?:/i.test(html), 'no external url() assets');

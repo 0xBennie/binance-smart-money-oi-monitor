@@ -28,6 +28,7 @@ export interface SmartMoneySnapshotRow {
   shortWhales: number; shortWhalesQty: number; shortWhalesAvgEntryPrice: number;
   longProfitTraders: number; shortProfitTraders: number;
   longProfitWhales: number; shortProfitWhales: number;
+  price?: number | null;   // mark price at capture (added 1.9.4; null on pre-1.9.4 rows)
 }
 
 export interface TopTraderSnapshotRow {
@@ -55,6 +56,8 @@ export interface SmartMoneyHistoryRow {
   shortTraders: number; shortQty: number; shortAvg: number;
   longProfitTraders: number; shortProfitTraders: number;
   longWhales: number; shortWhales: number;
+  longWhaleAvg: number; shortWhaleAvg: number;   // 庄家(鲸鱼)均价
+  price: number | null;                          // mark price at capture (null on pre-1.9.4 rows)
 }
 
 const RETENTION_DAYS = 30;
@@ -67,12 +70,27 @@ const RETENTION_DAYS = 30;
 export function resolveDbPath(): string {
   return process.env.SMART_MONEY_DB_PATH || path.join(process.cwd(), 'data', 'snapshots.db');
 }
+
+/** Turn a raw DB/native-module error into an actionable hint. The time-series CLIs
+ * (change/scan/chart) statically touch the DB layer, so a broken better-sqlite3
+ * (ABI mismatch after a Node upgrade, or not installed) would otherwise dump a raw
+ * stack — give the same guidance the MCP tools do. */
+export function dbErrorHint(e: any): string {
+  const msg = e?.message ?? String(e);
+  if (/NODE_MODULE_VERSION|different Node\.js version|was compiled against/i.test(msg))
+    return `本地 DB 读取失败:better-sqlite3 原生模块与当前 Node 版本不匹配(升级 Node 后常见)。修复:npm rebuild better-sqlite3(或 npm i better-sqlite3)。\n原始错误:${msg}`;
+  if (/Cannot find module 'better-sqlite3'|ERR_MODULE_NOT_FOUND|Could not locate the bindings/i.test(msg))
+    return `本地 DB 读取失败:缺少 better-sqlite3(时序工具 change/scan/chart 需要它)。安装:npm i better-sqlite3。\n原始错误:${msg}`;
+  return `本地 DB 读取失败:${msg}`;
+}
 const SM_SELECT_COLS =
   `ts, long_short_ratio AS longShortRatio,
    long_traders AS longTraders, long_traders_qty AS longQty, long_traders_avg_entry_price AS longAvg,
    short_traders AS shortTraders, short_traders_qty AS shortQty, short_traders_avg_entry_price AS shortAvg,
    long_profit_traders AS longProfitTraders, short_profit_traders AS shortProfitTraders,
-   long_whales AS longWhales, short_whales AS shortWhales`;
+   long_whales AS longWhales, short_whales AS shortWhales,
+   long_whales_avg_entry_price AS longWhaleAvg, short_whales_avg_entry_price AS shortWhaleAvg,
+   price AS price`;
 
 class Storage {
   private db: Database.Database | null = null;
@@ -89,8 +107,18 @@ class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = NORMAL');
     this.createTables();
+    this.migrate();
     this.prepareStmts();
     console.log(`[Storage] initialized: ${p}`);
+  }
+
+  /** Additive schema migrations for DBs created by an older version (SQLite has no
+   * ADD COLUMN IF NOT EXISTS, so probe table_info first). */
+  private migrate(): void {
+    const cols = this.db!.prepare(`PRAGMA table_info(ob_smart_money_snapshots)`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === 'price')) {
+      this.db!.exec(`ALTER TABLE ob_smart_money_snapshots ADD COLUMN price REAL`);
+    }
   }
 
   private createTables(): void {
@@ -104,6 +132,7 @@ class Storage {
         short_whales INTEGER, short_whales_qty REAL, short_whales_avg_entry_price REAL,
         long_profit_traders INTEGER, short_profit_traders INTEGER,
         long_profit_whales INTEGER, short_profit_whales INTEGER,
+        price REAL,
         PRIMARY KEY (symbol, ts)
       );
       CREATE INDEX IF NOT EXISTS idx_sm_ts ON ob_smart_money_snapshots(ts);
@@ -137,8 +166,8 @@ class Storage {
          long_whales, long_whales_qty, long_whales_avg_entry_price,
          short_whales, short_whales_qty, short_whales_avg_entry_price,
          long_profit_traders, short_profit_traders,
-         long_profit_whales, short_profit_whales)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         long_profit_whales, short_profit_whales, price)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     this.stmtInsertTopTrader = this.db!.prepare(`
       INSERT OR REPLACE INTO ob_top_trader_snapshots
@@ -166,7 +195,7 @@ class Storage {
       row.longWhales, row.longWhalesQty, row.longWhalesAvgEntryPrice,
       row.shortWhales, row.shortWhalesQty, row.shortWhalesAvgEntryPrice,
       row.longProfitTraders, row.shortProfitTraders,
-      row.longProfitWhales, row.shortProfitWhales,
+      row.longProfitWhales, row.shortProfitWhales, row.price ?? null,
     ]);
   }
 
@@ -235,7 +264,9 @@ class Storage {
                 s.long_traders AS longTraders, s.long_traders_qty AS longQty, s.long_traders_avg_entry_price AS longAvg,
                 s.short_traders AS shortTraders, s.short_traders_qty AS shortQty, s.short_traders_avg_entry_price AS shortAvg,
                 s.long_profit_traders AS longProfitTraders, s.short_profit_traders AS shortProfitTraders,
-                s.long_whales AS longWhales, s.short_whales AS shortWhales
+                s.long_whales AS longWhales, s.short_whales AS shortWhales,
+                s.long_whales_avg_entry_price AS longWhaleAvg, s.short_whales_avg_entry_price AS shortWhaleAvg,
+                s.price AS price
          FROM ob_smart_money_snapshots s
          JOIN (SELECT symbol, MAX(ts) AS mts FROM ob_smart_money_snapshots GROUP BY symbol) m
            ON s.symbol = m.symbol AND s.ts = m.mts`

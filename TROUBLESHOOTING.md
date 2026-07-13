@@ -15,7 +15,7 @@ Two different causes wear the same message:
 The 7-layer circuit breaker tripped process-wide on a 418 (soft, ~5 min) / 403 (hard, ~90 min, usually a CloudFront geo-block) / a `Retry-After`. All calls short-circuit **by design** — never retry-loop a 418. Wait for the TTL printed to stderr (`[binance-blocked] … ttl=Xs`); for a hard/geo block, run from a Binance-reachable region/VPS.
 
 **🔴 Running locally in a Binance-blocked region → everything is empty.**
-`bapi`/`fapi` are geo-restricted (e.g. mainland China without a proxy, or US for some endpoints). The MCP server / tracker must run somewhere that can reach Binance. Fix: proxy the local terminal, or run it on a VPS in the EU / Singapore / US-west. Quick test: `curl -v https://fapi.binance.com/fapi/v1/ping`.
+`bapi`/`fapi` are geo-restricted (e.g. mainland China without a proxy, or US for some endpoints). The MCP server / tracker must run somewhere that can reach Binance. Fix: set `HTTPS_PROXY=http://host:port` (since 1.9.3 the client tunnels its Binance calls through it; `NO_PROXY` bypasses named hosts), or run it on a VPS in the EU / Singapore / US-west. Quick test: `curl -v https://fapi.binance.com/fapi/v1/ping`.
 
 ## MCP & tools
 

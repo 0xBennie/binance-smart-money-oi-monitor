@@ -110,10 +110,13 @@ function parse(symbol: string, raw: any): SmartMoneyOverview | null {
 }
 
 export async function getSmartMoneyOverview(
-  symbol: string
+  symbol: string,
+  opts?: { force?: boolean }   // force=true skips the positive cache — the tracker needs a
+                               // FRESH snapshot (new ts) each sweep, else a cache hint <TTL
+                               // returns the same snap and INSERT OR REPLACE collapses the row.
 ): Promise<SmartMoneyOverview | null> {
   const cached = cache.get(symbol);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.snap;
+  if (!opts?.force && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.snap;
 
   if (isBinanceApiBlocked()) return cached?.snap ?? null;
 
@@ -202,10 +205,18 @@ export function smartMoneyNotionalUsd(sm: NotionalFields): number {
  * Smart Money's share of total market Open Interest (0..1).
  * Returns null if OI snapshot is missing or invalid.
  *
- * Interpretation:
+ * `smartMoneyNotionalUsd` sums BOTH sides (long + short gross notional), but
+ * Binance's Open Interest is SINGLE-sided — each open contract is counted once,
+ * not once per long AND once per short. So dividing gross-both-sides by
+ * single-sided OI double-counts and can exceed 100%. Every open contract has one
+ * long and one short, i.e. total open position-sides = 2 × OI; SM occupies
+ * (SM_long + SM_short) of them, so its share is gross / (2 × OI) ∈ [0,1].
+ * (Clamped as a floating-point / data-quirk safety net.)
+ *
+ * Interpretation (of the corrected 0..1 value):
  *   < 0.05  : SM is a small player, signals lag the broader market
- *   0.05–0.20 : typical for liquid majors
- *   > 0.30  : SM dominates the orderbook, price discovery follows SM positioning
+ *   0.05–0.15 : typical
+ *   > 0.20  : SM dominates the book, price discovery follows SM positioning
  */
 export function smartMoneyShareOfOI(
   sm: NotionalFields,
@@ -214,7 +225,7 @@ export function smartMoneyShareOfOI(
   if (!oiNowUsd || oiNowUsd <= 0) return null;
   const smUsd = smartMoneyNotionalUsd(sm);
   if (!Number.isFinite(smUsd) || smUsd <= 0) return null;
-  return smUsd / oiNowUsd;
+  return Math.min(1, smUsd / (2 * oiNowUsd));
 }
 
 export interface SmartMoneySidePositions {
@@ -265,7 +276,8 @@ export async function getSmartMoneyOverviewBatch(
   symbols: string[],
   spacingMs = 12_000,
   jitterMs = 3_000,
-  onResult?: (symbol: string, snap: SmartMoneyOverview) => void
+  onResult?: (symbol: string, snap: SmartMoneyOverview) => void,
+  force = false   // tracker passes true → fresh snapshot per sweep (see getSmartMoneyOverview)
 ): Promise<Map<string, SmartMoneyOverview>> {
   const out = new Map<string, SmartMoneyOverview>();
   for (const sym of symbols) {
@@ -273,7 +285,7 @@ export async function getSmartMoneyOverviewBatch(
       console.warn(`[smart-money-batch] aborted at ${out.size}/${symbols.length} due to global block`);
       break;
     }
-    const s = await getSmartMoneyOverview(sym);
+    const s = await getSmartMoneyOverview(sym, { force });
     if (s) {
       out.set(sym, s);
       if (onResult) {

@@ -160,25 +160,45 @@ import { createRequire } from 'node:module';
 // proxy ourselves via a proxy agent when the env names one for the Binance host.
 // Falls back to a plain keep-alive agent (direct) when no proxy is configured.
 const _proxyReq = createRequire(import.meta.url);
-function makeHttpsAgent(): https.Agent {
+// Agents cached by resolved proxy target (or 'direct') so keep-alive pools are
+// reused instead of rebuilt per request.
+const _agentCache = new Map<string, https.Agent>();
+function agentForUrl(url: string): https.Agent {
+  let proxyUrl = '';
   try {
     const { getProxyForUrl } = _proxyReq('proxy-from-env');
-    const proxyUrl: string = getProxyForUrl('https://fapi.binance.com');
+    proxyUrl = getProxyForUrl(url) || '';   // honors HTTP(S)_PROXY + per-host NO_PROXY for THIS url
+  } catch { /* proxy-from-env absent → treat as direct */ }
+  const key = proxyUrl || 'direct';
+  let agent = _agentCache.get(key);
+  if (!agent) {
     if (proxyUrl) {
-      const mod = _proxyReq('https-proxy-agent');
-      const Ctor = mod.HttpsProxyAgent || mod.default || mod;   // v5 (module=ctor) & v7 ({HttpsProxyAgent})
-      return new Ctor(proxyUrl, { keepAlive: true, maxSockets: 8, maxFreeSockets: 4 });
+      try {
+        const mod = _proxyReq('https-proxy-agent');
+        const Ctor = mod.HttpsProxyAgent || mod.default || mod;   // v5 (module=ctor) & v7 ({HttpsProxyAgent})
+        agent = new Ctor(proxyUrl, { keepAlive: true, maxSockets: 8, maxFreeSockets: 4 }) as https.Agent;
+      } catch { /* https-proxy-agent absent → fall through to direct */ }
     }
-  } catch {
-    /* proxy libs missing → fall through to direct keep-alive agent */
+    if (!agent) agent = new https.Agent({ keepAlive: true, maxSockets: 8, maxFreeSockets: 4 });
+    _agentCache.set(key, agent);
   }
-  return new https.Agent({ keepAlive: true, maxSockets: 8, maxFreeSockets: 4 });
+  return agent;
 }
 
 export const binanceHttp = axios.create({
-  proxy: false,   // we handle proxying via the agent above; axios's own https-proxy is unreliable
-  httpsAgent: makeHttpsAgent(),
+  proxy: false,   // we handle proxying via the agent below; axios's own https-proxy is unreliable
+  httpsAgent: agentForUrl('https://fapi.binance.com'),   // sensible default; interceptor refines per request
   httpAgent: new http.Agent({ keepAlive: true, maxSockets: 8, maxFreeSockets: 4 }),
+});
+
+// Resolve the proxy PER REQUEST, not once at module load: otherwise a HTTPS_PROXY
+// set after import (e.g. a consumer's dotenv/main), or a NO_PROXY that excludes one
+// Binance host but not another, is silently ignored. Agents are cached by proxy
+// target so keep-alive still holds.
+binanceHttp.interceptors.request.use((config) => {
+  const url = `${config.baseURL ?? ''}${config.url ?? ''}`;
+  if (/^https:/i.test(url)) config.httpsAgent = agentForUrl(url);
+  return config;
 });
 
 /**

@@ -12,25 +12,28 @@ export interface SideChange {
   qtyChange: number;          // >0 added, <0 reduced (contracts)
   qtyChangePct: number | null;
   fromAvg: number; toAvg: number;
+  whaleAvg: number;           // latest 庄家(鲸鱼)均价 for this side — compare vs `price`
 }
 
 export interface ChangeResult {
   symbol: string; fromTs: number; toTs: number; spanMinutes: number; samples: number;
+  price: number | null;       // latest mark price → 现价 vs 庄家均价 浮盈/浮亏
   long: SideChange; short: SideChange;
   verdict: string;
 }
 
 /** Pure: per-side delta between two snapshots. */
 export function computeChange(from: SmartMoneyHistoryRow, to: SmartMoneyHistoryRow): { long: SideChange; short: SideChange } {
-  const side = (fq: number, tq: number, fa: number, ta: number): SideChange => ({
+  const side = (fq: number, tq: number, fa: number, ta: number, wAvg: number): SideChange => ({
     fromQty: fq, toQty: tq,
     qtyChange: tq - fq,
     qtyChangePct: fq > 0 ? r2(((tq - fq) / fq) * 100) : null,
     fromAvg: fa, toAvg: ta,
+    whaleAvg: wAvg,
   });
   return {
-    long: side(from.longQty, to.longQty, from.longAvg, to.longAvg),
-    short: side(from.shortQty, to.shortQty, from.shortAvg, to.shortAvg),
+    long: side(from.longQty, to.longQty, from.longAvg, to.longAvg, to.longWhaleAvg),
+    short: side(from.shortQty, to.shortQty, from.shortAvg, to.shortAvg, to.shortWhaleAvg),
   };
 }
 
@@ -55,6 +58,7 @@ export function getChange(symbol: string, minutes: number): ChangeResult | { sym
     fromTs: from.ts, toTs: to.ts,
     spanMinutes: Math.round((to.ts - from.ts) / 60_000),
     samples: rows.length,
+    price: to.price ?? null,
     long, short,
     verdict: `${word(long.qtyChange, '多头')}，${word(short.qtyChange, '空头')}`,
   };
@@ -76,7 +80,10 @@ export function scanExtreme(opts: { limit?: number; maxAgeMin?: number; minTrade
   const rows = storage.latestSmartMoney().filter(
     (row) => now - row.ts <= maxAgeMs
       && (row.longTraders + row.shortTraders) >= minTraders
-      && row.longShortRatio > 0,
+      // NOT `longShortRatio > 0`: a legit all-short symbol has 0 long traders → LSR 0,
+      // and that is exactly the most-short case `mostShort` should surface. The
+      // minTraders check above already drops no-data rows. Just require a finite ratio.
+      && Number.isFinite(row.longShortRatio),
   );
   if (!rows.length) {
     return { scanned: 0, error: 'no fresh local snapshots — run smart-money-tick to populate the DB first (or widen maxAgeMin).' };

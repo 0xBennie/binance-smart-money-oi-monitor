@@ -27,8 +27,8 @@ export interface TickerInfo {
   symbol: string;
   ts: number;
   lastPrice: number;
-  priceChangePct24h: number;   // already in %, e.g. +19.14
-  quoteVolume24hUsd: number;
+  priceChangePct24h: number | null;   // already in %, e.g. +19.14 (null if payload malformed)
+  quoteVolume24hUsd: number | null;    // null if payload malformed
 }
 
 export interface FundingInfo {
@@ -99,12 +99,17 @@ export async function getTicker24h(symbol: string): Promise<TickerInfo | null> {
     // Drop a malformed payload rather than caching/returning a NaN price
     // (a NaN price silently fabricates PNL/state downstream, e.g. in the panel).
     if (!Number.isFinite(lastPrice)) return cached?.snap ?? null;
+    // Guard these too (only lastPrice was checked): a missing field → NaN, which
+    // rendered as "NaN%" in the push header. Coerce non-finite → null so the
+    // downstream `== null` guards degrade to "—".
+    const chg = parseFloat(d.priceChangePercent);
+    const qvol = parseFloat(d.quoteVolume);
     const snap: TickerInfo = {
       symbol: d.symbol,
       ts: Date.now(),
       lastPrice,
-      priceChangePct24h: parseFloat(d.priceChangePercent),
-      quoteVolume24hUsd: parseFloat(d.quoteVolume),
+      priceChangePct24h: Number.isFinite(chg) ? chg : null,
+      quoteVolume24hUsd: Number.isFinite(qvol) ? qvol : null,
     };
     capSet(tickerCache, symbol, { snap, fetchedAt: Date.now() });
     return snap;

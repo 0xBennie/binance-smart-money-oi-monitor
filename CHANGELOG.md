@@ -2,6 +2,33 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.9.4
+
+Positioning visualization + a sweep of correctness/security/doc fixes.
+
+**Chart & price**
+- **`render_chart` is now a 3-panel line chart** — 多头持仓 / 空头持仓 / 庄家均价 vs 现价 — each panel on its OWN y-scale, so a side's swings aren't flattened (long ~20M and short ~45M no longer share one axis). The price panel plots long/short whale (庄家) average entry against mark price, so you can see whether the whales are in profit or underwater; a 0-position side's avg no longer anchors the axis at $0. `buildChart` is now async.
+- **Mark price is captured per snapshot** — new `price` column (auto-migrated via `ALTER TABLE`), filled from a single batch `ticker/price` call each sweep. `get_change` now returns `price` + per-side `whaleAvg` so a text report can show 现价 vs 庄家均价 P&L. Pre-1.9.4 rows backfill the price line from `klines` at render time (best-effort).
+
+**Correctness**
+- **`smartMoneyShareOfOI` no longer double-counts** — it summed both sides (long + short gross notional) but divided by single-sided Open Interest, so it overstated ~2× and could print >100%. Now `gross / (2 × OI)`, clamped to [0,1] (SM's share of total open position-sides).
+- **`scanExtreme` no longer drops all-short symbols** — the `longShortRatio > 0` filter excluded symbols with 0 long traders (LSR 0), i.e. exactly the most-short case `mostShort` should surface; replaced with a finite-ratio check (the `minTraders` gate already drops no-data rows).
+- **TG push 名义多空比 is a ratio, not a percent** — it rendered `1.5` as "150.00%"; now matches the HTML panel's plain `1.50`.
+- **Ticker 24h change / volume are null-guarded** — a malformed payload made `priceChangePct24h` NaN → "NaN%" in the push header; non-finite now degrades to "—".
+- **Sub-10-min cache collapse avoided** — the tracker forces a fresh fetch per sweep (a positive-cache hit returned the same snapshot with a frozen `ts`, so `INSERT OR REPLACE` collapsed the series when the interval was under the 10-min cache TTL).
+
+**Proxy (hardening the 1.9.3 feature)**
+- Proxy is now resolved **per request** (call-time env + per-host `NO_PROXY`), not once at module load — a `HTTPS_PROXY` set after import, or a `NO_PROXY` excluding one Binance host, is honored. Agents are cached by proxy target so keep-alive holds.
+- `proxy-from-env` is now a declared dependency (it was only present transitively via axios, so strict installs — pnpm / Yarn PnP — could silently disable proxying).
+
+**Ops & DX**
+- **Daemon liveness** — after 3 consecutive empty sweeps the tracker logs an escalated `STUCK` error, so a permanently blocked IP / dead proxy is visible instead of looping silently while the supervisor shows "online".
+- **Tracker `bin`** — `binance-smart-money-oi-monitor-track` lets npm-install (non-clone) users run the tracker without cloning.
+- **MCP `period` validated** against the enum before hitting Binance (a bad value was forwarded and returned a misleading "unsupported").
+- **CLIs** (`change`/`scan`/`chart`) print an actionable hint on a broken/absent `better-sqlite3` (e.g. ABI mismatch after a Node upgrade) instead of a raw stack trace.
+- **Dashboard** binds `127.0.0.1` by default (opt into `0.0.0.0` via `SMART_MONEY_DASHBOARD_HOST`, with a security warning), HTML-escapes reflected `symbol` params (was reflected-XSS), and `/api/*` routes return JSON errors + handle a missing DB gracefully.
+- **Docs** — README (EN + 中文) and TROUBLESHOOTING now document `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY`, correct the tool count (10 = 7 live + 3 DB-backed), fix the "no native modules at runtime" wording (native module loads only when a DB tool is called), and show npm-install users how to run the tracker.
+
 ## 1.9.3
 
 Proxy support + preflight resilience — makes the tracker and live tools actually work in the geo-restricted setups the docs point at.

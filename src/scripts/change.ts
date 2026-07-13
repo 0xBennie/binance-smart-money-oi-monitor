@@ -5,6 +5,7 @@
  */
 import 'dotenv/config';
 import { getChange } from '../tracking.js';
+import { dbErrorHint } from '../storage.js';
 
 const [sym, minArg] = process.argv.slice(2);
 if (!sym) {
@@ -12,4 +13,9 @@ if (!sym) {
   process.exit(1);
 }
 const minutes = Number(minArg) > 0 ? Number(minArg) : 60;
-console.log(JSON.stringify(getChange(sym, minutes), null, 2));
+try {
+  console.log(JSON.stringify(getChange(sym, minutes), null, 2));
+} catch (e) {
+  console.error(dbErrorHint(e));
+  process.exit(1);
+}

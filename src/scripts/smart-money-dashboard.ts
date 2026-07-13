@@ -26,6 +26,27 @@ if (!_expressMod) {
 const express = _expressMod.default;
 
 const PORT = parseInt(process.env.SMART_MONEY_DASHBOARD_PORT || process.env.PORT || '3001', 10);
+// Bind loopback by default so the snapshot DB + JSON API are NOT exposed to the
+// whole network. A user can OPT IN to a public bind by setting
+// SMART_MONEY_DASHBOARD_HOST=0.0.0.0 (e.g. behind their own auth/proxy).
+const HOST = process.env.SMART_MONEY_DASHBOARD_HOST || '127.0.0.1';
+
+/** Escape a string for safe interpolation into HTML text or double-quoted attrs. */
+function htmlEscape(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** True when a DB read failed because the snapshot file doesn't exist yet. */
+function isMissingDbError(e: any): boolean {
+  const code = e?.code;
+  if (code === 'SQLITE_CANTOPEN' || code === 'ENOENT') return true;
+  return /unable to open database file|no such file/i.test(String(e?.message || ''));
+}
 
 interface SnapRow {
   symbol: string;
@@ -174,7 +195,7 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
     const spreadStyle = r.whalePriceSpread > 0.05 ? 'color:#ef4444' : r.whalePriceSpread < -0.05 ? 'color:#22c55e' : '';
     return `
       <tr>
-        <td><a href="/symbol/${r.symbol}">${r.symbol}</a></td>
+        <td><a href="/symbol/${encodeURIComponent(r.symbol)}">${htmlEscape(r.symbol)}</a></td>
         <td>${r.long_traders + r.short_traders} (W ${r.long_whales + r.short_whales})</td>
         <td>${r.long_short_ratio.toFixed(2)}</td>
         <td class="g">${fmtPct(r.longProfitPct)}</td>
@@ -263,7 +284,7 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
 function renderSymbolHistoryHtml(symbol: string, rows: SnapRow[]): string {
   return `<!doctype html>
 <html lang="zh-CN"><head>
-<meta charset="utf-8"><title>${symbol} — Smart Money History</title>
+<meta charset="utf-8"><title>${htmlEscape(symbol)} — Smart Money History</title>
 <style>
   :root { color-scheme: dark; }
   body { font: 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif; background:#0a0a0a; color:#e4e4e7; margin:0; padding:16px; }
@@ -276,7 +297,7 @@ function renderSymbolHistoryHtml(symbol: string, rows: SnapRow[]): string {
   th { color:#a1a1aa; background:#18181b; }
 </style></head>
 <body>
-  <h1><a href="/">←</a> ${symbol}</h1>
+  <h1><a href="/">←</a> ${htmlEscape(symbol)}</h1>
   <div class="meta">${rows.length} snapshots · 30 day history</div>
   <table>
     <thead><tr>
@@ -323,7 +344,7 @@ app.get('/', (req, res) => {
     const rows = getLatestSnapshots();
     res.set('content-type', 'text/html; charset=utf-8').send(renderHtml(rows, sort));
   } catch (e: any) {
-    res.status(500).send(`<pre>${e.message}</pre>`);
+    res.status(500).send(`<pre>${htmlEscape(e?.message || 'internal error')}</pre>`);
   }
 });
 
@@ -332,26 +353,48 @@ app.get('/symbol/:symbol', (req, res) => {
   try {
     const rows = getSymbolHistory(sym);
     if (rows.length === 0) {
-      res.status(404).send(`<pre>no data for ${sym}</pre>`);
+      res.status(404).send(`<pre>no data for ${htmlEscape(sym)}</pre>`);
       return;
     }
     res.set('content-type', 'text/html; charset=utf-8').send(renderSymbolHistoryHtml(sym, rows));
   } catch (e: any) {
-    res.status(500).send(`<pre>${e.message}</pre>`);
+    res.status(500).send(`<pre>${htmlEscape(e?.message || 'internal error')}</pre>`);
   }
 });
 
 app.get('/api/snapshots', (_req, res) => {
-  res.json(getLatestSnapshots());
+  try {
+    res.json(getLatestSnapshots());
+  } catch (e: any) {
+    if (isMissingDbError(e)) {
+      res.status(503).json({ error: 'no local DB yet — run the tracker first' });
+      return;
+    }
+    res.status(500).json({ error: e?.message || 'internal error' });
+  }
 });
 
 app.get('/api/symbol/:symbol/history', (req, res) => {
-  const days = parseInt(String(req.query.days || '30'), 10);
-  res.json(getSymbolHistory(req.params.symbol.toUpperCase(), days));
+  try {
+    // Guard the numeric query param so `?days=abc` doesn't become NaN.
+    let days = Number(req.query.days);
+    if (!Number.isFinite(days) || days <= 0) days = 30;
+    res.json(getSymbolHistory(req.params.symbol.toUpperCase(), days));
+  } catch (e: any) {
+    if (isMissingDbError(e)) {
+      res.status(503).json({ error: 'no local DB yet — run the tracker first' });
+      return;
+    }
+    res.status(500).json({ error: e?.message || 'internal error' });
+  }
 });
 
 app.get('/health', (_req, res) => res.json({ ok: true, port: PORT }));
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[SmartMoneyDashboard] listening on http://0.0.0.0:${PORT}`);
+if (HOST === '0.0.0.0' || HOST === '::') {
+  console.warn(`[SmartMoneyDashboard] SECURITY: binding ${HOST} exposes the snapshot DB + JSON API to the whole network — put it behind auth/a proxy or use 127.0.0.1.`);
+}
+
+app.listen(PORT, HOST, () => {
+  console.log(`[SmartMoneyDashboard] listening on http://${HOST}:${PORT}`);
 });

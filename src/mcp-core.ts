@@ -17,7 +17,7 @@ import { fundingCost } from './funding.js';
 import { isBinanceApiBlocked } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.9.3' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.9.4' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // Auto-attached to every analysis result. This tool reports on-chain/exchange data
 // and structure — it deliberately does NOT emit buy/sell or directional signals.
@@ -34,6 +34,12 @@ function noData(fields: Record<string, unknown>): Record<string, unknown> {
   };
 }
 const TT_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
+// An MCP server must not trust the client to honor the schema enum — validate the
+// period before forwarding it to Binance, else a bad value (e.g. "99h") gets a
+// misleading "symbol unsupported" instead of falling back cleanly.
+function validPeriod(p: unknown): TopTraderPeriod {
+  return typeof p === 'string' && (TT_PERIODS as string[]).includes(p) ? (p as TopTraderPeriod) : '5m';
+}
 
 function hoursAgo(ms: number | undefined): number | null {
   if (!ms) return null;
@@ -63,7 +69,7 @@ async function toolGetSmartMoney(args: any) {
 async function toolGetTopTrader(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
-  const period = (args.period as TopTraderPeriod) || '5m';
+  const period = validPeriod(args.period);
   const tt = await getTopTraderSnapshot(symbol, period);
   if (!tt) return noData({ symbol, period });
   return {
@@ -98,7 +104,7 @@ async function toolGetFullPicture(args: any) {
   if (!symbol) return { error: 'symbol is required' };
   const [sm, tt, oi, funding, intervalHours] = await Promise.all([
     getSmartMoneyOverview(symbol),
-    getTopTraderSnapshot(symbol, (args.period as TopTraderPeriod) || '5m'),
+    getTopTraderSnapshot(symbol, validPeriod(args.period)),
     getOpenInterest(symbol),
     getFundingInfo(symbol),
     getFundingIntervalHours(symbol),
@@ -226,7 +232,7 @@ async function toolRenderChart(args: any) {
   const hours = Number(args.hours) > 0 ? Number(args.hours) : 24;
   try {
     const { buildChart, renderChartHtml } = await import('./chart.js');
-    const data = buildChart(symbol, hours);
+    const data = await buildChart(symbol, hours);
     if (data.rows.length < 2) return { symbol, error: `not enough local history for ${symbol}. ${DB_HINT}` };
     return { symbol, points: data.rows.length, html: renderChartHtml(data), note: 'Save html to a .html file and open/screenshot it.' };
   } catch (e: any) {

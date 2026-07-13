@@ -10,12 +10,13 @@ test('smartMoneyNotionalUsd = long qty×avgEntry + short qty×avgEntry', () => {
   assert.equal(smartMoneyNotionalUsd(sm), 10 * 100 + 5 * 200); // 2000
 });
 
-test('smartMoneyShareOfOI = notional / OI, with null guards', () => {
+test('smartMoneyShareOfOI = gross notional / (2×OI), clamped, with null guards', () => {
   const sm = {
-    longTradersQty: 10, longTradersAvgEntryPrice: 100, // 1000 notional
+    longTradersQty: 10, longTradersAvgEntryPrice: 100, // 1000 gross notional
     shortTradersQty: 0, shortTradersAvgEntryPrice: 0,
   };
-  assert.equal(smartMoneyShareOfOI(sm, 4000), 0.25);
+  assert.equal(smartMoneyShareOfOI(sm, 4000), 0.125);        // 1000 / (2 × 4000) — not 0.25 (single-OI double-count)
+  assert.equal(smartMoneyShareOfOI({ longTradersQty: 100, longTradersAvgEntryPrice: 100, shortTradersQty: 0, shortTradersAvgEntryPrice: 0 }, 1000), 1); // clamp: 10000/(2*1000)=5 → 1
   assert.equal(smartMoneyShareOfOI(sm, 0), null);            // OI 0 -> null
   assert.equal(smartMoneyShareOfOI(sm, null), null);         // OI missing -> null
   assert.equal(smartMoneyShareOfOI(sm, undefined), null);
