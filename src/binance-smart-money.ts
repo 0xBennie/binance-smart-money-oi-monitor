@@ -22,6 +22,9 @@ const SMART_MONEY_URL =
   'https://www.binance.com/bapi/futures/v1/public/future/smart-money/signal/overview';
 const CACHE_TTL_MS = 10 * 60_000;
 const REQ_TIMEOUT_MS = 8_000;
+// Hard per-symbol cap in the batch sweep — a belt-and-suspenders bound so a fetch
+// that stalls past its own request timeout (proxy edge cases) can't hang the daemon.
+const SYMBOL_HARD_TIMEOUT_MS = 30_000;
 
 // Browser-style headers to look like a normal web client
 const REQ_HEADERS = {
@@ -285,7 +288,17 @@ export async function getSmartMoneyOverviewBatch(
       console.warn(`[smart-money-batch] aborted at ${out.size}/${symbols.length} due to global block`);
       break;
     }
-    const s = await getSmartMoneyOverview(sym, { force });
+    // Deterministic per-symbol cap: even if a fetch stalls past its own timeout
+    // (observed intermittently through a flaky proxy — a single symbol hung a sweep
+    // for ~16min), abandon it after SYMBOL_HARD_TIMEOUT_MS so one hung symbol can't
+    // stall the whole daemon sweep. The hung promise resolves later, harmlessly.
+    const s = await Promise.race([
+      getSmartMoneyOverview(sym, { force }),
+      new Promise<null>((r) => setTimeout(() => {
+        console.warn(`[smart-money-batch] ${sym} exceeded ${SYMBOL_HARD_TIMEOUT_MS}ms — skipping this sweep`);
+        r(null);
+      }, SYMBOL_HARD_TIMEOUT_MS)),
+    ]);
     if (s) {
       out.set(sym, s);
       if (onResult) {

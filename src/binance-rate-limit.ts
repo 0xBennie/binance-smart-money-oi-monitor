@@ -121,7 +121,9 @@ export function getBinanceWeightUtilization(): number {
 /** Sleep until next 1min window if weight > 70%. */
 export async function waitForBinanceWeightHeadroom(): Promise<void> {
   if (getBinanceWeightUtilization() < WEIGHT_HEADROOM_RATIO) return;
-  const ms = Math.max(0, _weightResetAt - Date.now() + 500);
+  // Cap at ~65s: the 1-min weight window can never need a longer wait, and this
+  // guards against a corrupted _weightResetAt ever producing a multi-minute sleep.
+  const ms = Math.min(65_000, Math.max(0, _weightResetAt - Date.now() + 500));
   if (ms > 0) {
     console.log(
       `[binance-weight] utilization=${(getBinanceWeightUtilization() * 100).toFixed(0)}%, ` +

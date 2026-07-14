@@ -2,6 +2,14 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.10.2
+
+Patch — defensive bounds on a daemon sweep (belt-and-suspenders for flaky proxies).
+
+- `getSmartMoneyOverviewBatch` caps each symbol at 30s via `Promise.race`, so one stalled fetch can't hang the whole sweep (the hung promise resolves later, harmlessly).
+- `waitForBinanceWeightHeadroom` sleep is clamped to ≤65s (the 1-min weight window never needs longer; guards against a corrupted reset marker).
+- Caveat: these bound the *common* case. A proxy that stalls badly enough to block the Node event loop can still delay a sweep — client-side timers can't fire while the loop is blocked. For reliable cadence, run the tracker where Binance is directly reachable (a VPS) rather than behind a flaky local proxy.
+
 ## 1.10.1
 
 Patch — hard request timeout so a flaky proxy can't hang a sweep.

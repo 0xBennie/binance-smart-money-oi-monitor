@@ -1,6 +1,6 @@
 {
   "name": "binance-smart-money-oi-monitor",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "description": "Binance Smart Money (Smart Signal) + Open Interest anomaly monitor — 17 whale fields the public fapi can't give you, an MCP server for any terminal AI, a shareable panel card, and a full-market Telegram alert bot. 7-layer 418 protection. A Bennie Strategy project.",
   "license": "MIT",
   "author": "Bennie Strategy (0xBenniee) <https://x.com/0xBenniee>",
