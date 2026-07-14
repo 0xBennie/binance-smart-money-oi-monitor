@@ -198,6 +198,14 @@ export const binanceHttp = axios.create({
 binanceHttp.interceptors.request.use((config) => {
   const url = `${config.baseURL ?? ''}${config.url ?? ''}`;
   if (/^https:/i.test(url)) config.httpsAgent = agentForUrl(url);
+  // Hard timeout via AbortSignal: axios's `timeout` option does NOT abort a
+  // request stalled in a proxy CONNECT/TLS handshake (observed: a flaky proxy hung
+  // a 10s-timeout request for 200s+, turning a 15s sweep into 17min). AbortSignal
+  // aborts at the socket level regardless of the proxy agent. Keep any caller signal.
+  if (!config.signal) {
+    const ms = typeof config.timeout === 'number' && config.timeout > 0 ? config.timeout : 15_000;
+    config.signal = AbortSignal.timeout(ms);
+  }
   return config;
 });
 

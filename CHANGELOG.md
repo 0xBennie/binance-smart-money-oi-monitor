@@ -2,6 +2,12 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.10.1
+
+Patch — hard request timeout so a flaky proxy can't hang a sweep.
+
+- `binanceHttp` now enforces each request's timeout via `AbortSignal.timeout` in addition to axios's `timeout` option. axios's option does **not** abort a request stalled in a proxy CONNECT/TLS handshake — a flaky proxy was observed hanging a 10s-timeout request for 200s+, turning a ~15s tracker sweep into ~17min and starving the time series (snapshots ended up >30min apart → "not enough history"). `AbortSignal` aborts at the socket level regardless of the proxy agent (verified: a blackhole request now cancels at its timeout instead of hanging). Surfaced by the 1.9.3 proxy support.
+
 ## 1.10.0
 
 New analysis features + a from-scratch guide. Tool count is now **11** (7 live + 4 DB-backed).
