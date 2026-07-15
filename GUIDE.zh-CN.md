@@ -72,7 +72,7 @@ SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run chart  BILL      # 生成三面板
 npm run dashboard                                              # Web 看板(默认只绑 127.0.0.1)
 ```
 
-> npm-install(非 clone)用户也能跑 tracker:`node node_modules/binance-smart-money-oi-monitor/dist/scripts/smart-money-tick.js`(带同样的 env)。
+> npm-install(非 clone)用户也能跑 tracker:`npx binance-smart-money-oi-monitor-track`(带同样的 env)。
 
 **3) 主动告警(可选,opt-in)** —— 设了 TG token 才发,阈值触发自动推:
 

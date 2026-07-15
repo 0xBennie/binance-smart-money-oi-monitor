@@ -393,15 +393,16 @@ It writes to `data/snapshots.db` (30-day retention).
 > otherwise each falls back to its own `cwd/data/snapshots.db` and the time-series
 > tools quietly read an empty file. (`docker compose` sets this for you.)
 
-> **Installed via npm (not a clone)?** The `bin` only launches the MCP server, and
-> `npm run track` only exists inside a clone. To run the tracker from an installed
-> package, invoke the built script directly:
+> **Installed via npm (not a clone)?** The package ships several `bin`s — the MCP
+> server (`binance-smart-money-oi-monitor` / `-mcp`) **and** the tracker
+> (`binance-smart-money-oi-monitor-track`). `npm run track` only exists inside a
+> clone, so from an installed package run the tracker bin via `npx`:
 >
 > ```bash
 > SMART_MONEY_WATCHLIST=BEAT,BILL \
 > SMART_MONEY_DB_PATH=/abs/path/snapshots.db \
 > SMART_MONEY_INTERVAL_MIN=15 \
-> node node_modules/binance-smart-money-oi-monitor/dist/scripts/smart-money-tick.js
+> npx binance-smart-money-oi-monitor-track
 > ```
 >
 > `get_change` / `scan_extreme` / `render_chart` stay empty until this runs against

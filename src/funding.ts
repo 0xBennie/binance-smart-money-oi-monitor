@@ -29,11 +29,11 @@ const round = (x: number, d: number): number => {
  * @param notionalUsd     position size in USD (default $10,000)
  */
 export function fundingCost(
-  ratePerInterval: number,
+  ratePerInterval: number | null | undefined,
   intervalHours = 8,
   notionalUsd = 10_000,
 ): FundingCost {
-  const rate = Number.isFinite(ratePerInterval) ? ratePerInterval : 0;
+  const rate = typeof ratePerInterval === 'number' && Number.isFinite(ratePerInterval) ? ratePerInterval : 0;
   const interval = Number.isFinite(intervalHours) && intervalHours > 0 ? intervalHours : 8;
   const notional = Number.isFinite(notionalUsd) && notionalUsd > 0 ? notionalUsd : 10_000;
 

@@ -6,7 +6,9 @@ import {
   getSmartMoneyOverview,
   smartMoneyNotionalUsd,
   smartMoneyShareOfOI,
+  smartMoneySide,
   type SmartMoneyOverview,
+  type SmartMoneySidePositions,
 } from './binance-smart-money.js';
 import { getTicker24h } from './binance-ticker.js';
 import { getOpenInterest, type OpenInterestSnapshot } from './binance-open-interest.js';
@@ -52,23 +54,28 @@ export function computePanel(
   // Normalize the price up front: a non-finite or non-positive price (e.g. a
   // malformed ticker → NaN) becomes null so it can't fabricate PNL/state.
   const p = Number.isFinite(price as number) && (price as number) > 0 ? (price as number) : null;
-  const longNotional = sm.longTradersQty * sm.longTradersAvgEntryPrice;
-  const shortNotional = sm.shortTradersQty * sm.shortTradersAvgEntryPrice;
-  const total = longNotional + shortNotional;
   const { oi, tt } = extras;
 
-  const sideOf = (
-    traders: number, whales: number, qty: number, avgEntry: number,
-    profitTraders: number, isLong: boolean,
-  ): PanelSide => {
-    const valid = qty > 0 && avgEntry > 0;   // real position with a known entry
+  // Canonical per-side breakdown (traders/whales/avgEntry/entry-basis notional) —
+  // same source the MCP get_smart_money tool uses, so the panel and that tool can't
+  // drift. The panel layers on TWO product-specific bits smartMoneySide doesn't do:
+  // a clamped 0..1 profit FRACTION (for the bar) and a live-price PNL.
+  const longSide = smartMoneySide(sm, 'long');
+  const shortSide = smartMoneySide(sm, 'short');
+  const total = longSide.smartMoneyUsd + shortSide.smartMoneyUsd;
+
+  const sideOf = (s: SmartMoneySidePositions, profitTraders: number, isLong: boolean): PanelSide => {
+    const valid = s.smartMoneyUsd > 0 && s.avgEntry > 0;   // real position with a known entry
     return {
-      traders, whales, avgEntry,
-      notionalUsd: valid ? qty * avgEntry : 0,
-      profitPct: clamp01(traders > 0 ? profitTraders / traders : 0),
+      traders: s.traders,
+      whales: s.whales,
+      avgEntry: s.avgEntry,
+      notionalUsd: s.smartMoneyUsd,
+      profitPct: clamp01(s.traders > 0 ? profitTraders / s.traders : 0),
       // Only a real position + a real current price yields a PNL; otherwise null
       // (renderer then shows no 盈利/亏损 badge instead of a fabricated one).
-      pnlUsd: p != null && valid ? qty * (isLong ? p - avgEntry : avgEntry - p) : null,
+      // qty is recovered from the entry-basis notional (smartMoneyUsd / avgEntry).
+      pnlUsd: p != null && valid ? (s.smartMoneyUsd / s.avgEntry) * (isLong ? p - s.avgEntry : s.avgEntry - p) : null,
     };
   };
 
@@ -78,10 +85,10 @@ export function computePanel(
     generatedAt: Date.now(),
     totalNotionalUsd: smartMoneyNotionalUsd(sm),
     totalTraders: sm.totalTraders || sm.longTraders + sm.shortTraders,
-    longShareOfTotal: total > 0 ? longNotional / total : 0.5,
-    longShortNotionalRatio: shortNotional > 0 ? longNotional / shortNotional : null,
-    long: sideOf(sm.longTraders, sm.longWhales, sm.longTradersQty, sm.longTradersAvgEntryPrice, sm.longProfitTraders, true),
-    short: sideOf(sm.shortTraders, sm.shortWhales, sm.shortTradersQty, sm.shortTradersAvgEntryPrice, sm.shortProfitTraders, false),
+    longShareOfTotal: total > 0 ? longSide.smartMoneyUsd / total : 0.5,
+    longShortNotionalRatio: shortSide.smartMoneyUsd > 0 ? longSide.smartMoneyUsd / shortSide.smartMoneyUsd : null,
+    long: sideOf(longSide, sm.longProfitTraders, true),
+    short: sideOf(shortSide, sm.shortProfitTraders, false),
     topPositionLsr: tt?.topPositionLSR ?? null,
     takerBsr: tt?.takerBSR ?? null,
     smShareOfOI: oi ? smartMoneyShareOfOI(sm, oi.oiNowUsd) : null,

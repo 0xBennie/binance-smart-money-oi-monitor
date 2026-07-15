@@ -121,7 +121,11 @@ export async function getSmartMoneyOverview(
   const cached = cache.get(symbol);
   if (!opts?.force && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.snap;
 
-  if (isBinanceApiBlocked()) return cached?.snap ?? null;
+  // A force caller (the tracker) wants FRESH-or-nothing: returning the cached snap
+  // here hands back a STALE ts, which INSERT OR REPLACE then rewrites over the
+  // existing (symbol, ts) row — adding no new point and freezing the series. Only
+  // the non-force (live/panel/MCP) path may fall back to the cached snap.
+  if (isBinanceApiBlocked()) return opts?.force ? null : (cached?.snap ?? null);
 
   // Return the recent empty immediately — skips 2 requests + 400ms for a data-less
   // symbol on every sweep within the TTL.
@@ -172,7 +176,9 @@ export async function getSmartMoneyOverview(
   // Tombstone only a definitive empty that persisted through the retry, so the
   // same data-less symbol returns null instantly for the next NEG_TTL_MS.
   if (sawDefinitiveEmpty) capSet(negCache, symbol, Date.now());
-  return cached?.snap ?? null;
+  // force → fresh-or-nothing (see the isBinanceApiBlocked branch above): never hand
+  // the tracker a stale-ts cached snap that would collapse its time series.
+  return opts?.force ? null : (cached?.snap ?? null);
 }
 
 /**
@@ -292,13 +298,21 @@ export async function getSmartMoneyOverviewBatch(
     // (observed intermittently through a flaky proxy — a single symbol hung a sweep
     // for ~16min), abandon it after SYMBOL_HARD_TIMEOUT_MS so one hung symbol can't
     // stall the whole daemon sweep. The hung promise resolves later, harmlessly.
+    // Hoist the timer id so it can be cleared once the race settles. Left dangling,
+    // it (a) fires ~30s AFTER a SUCCESSFUL fetch, logging a false "exceeded" warning
+    // for a symbol that never stalled, and (b) holds the event loop open the whole
+    // time. Clear it in finally, and only warn when the timeout branch actually won.
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const s = await Promise.race([
       getSmartMoneyOverview(sym, { force }),
-      new Promise<null>((r) => setTimeout(() => {
-        console.warn(`[smart-money-batch] ${sym} exceeded ${SYMBOL_HARD_TIMEOUT_MS}ms — skipping this sweep`);
-        r(null);
-      }, SYMBOL_HARD_TIMEOUT_MS)),
-    ]);
+      new Promise<null>((r) => {
+        timer = setTimeout(() => { timedOut = true; r(null); }, SYMBOL_HARD_TIMEOUT_MS);
+      }),
+    ]).finally(() => { if (timer) clearTimeout(timer); });
+    if (timedOut) {
+      console.warn(`[smart-money-batch] ${sym} exceeded ${SYMBOL_HARD_TIMEOUT_MS}ms — skipping this sweep`);
+    }
     if (s) {
       out.set(sym, s);
       if (onResult) {

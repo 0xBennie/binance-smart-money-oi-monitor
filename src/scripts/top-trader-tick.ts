@@ -19,10 +19,10 @@
  *   - Sharding usually unnecessary for top-trader (fapi is faster than web bapi)
  */
 import 'dotenv/config';
-import axios from 'axios';
 import { storage } from '../storage.js';
 import { getTopTraderSnapshotsBatch, type TopTraderPeriod } from '../binance-top-trader.js';
-import { preflightBinanceFapi } from '../binance-rate-limit.js';
+import { preflightBinanceFapi, binanceHttp } from '../binance-rate-limit.js';
+import { getUsdtPerpetuals } from '../symbol-list.js';
 import { installGracefulShutdown } from '../cron-utils.js';
 
 const POOL_MAX    = parseInt(process.env.TOP_TRADER_POOL_MAX    || '0', 10);
@@ -34,30 +34,6 @@ const VALID_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'] 
 function parsePeriod(arg: string | undefined): TopTraderPeriod {
   const p = (arg || '5m') as TopTraderPeriod;
   return (VALID_PERIODS as readonly string[]).includes(p) ? p : '5m';
-}
-
-async function getAllUsdtPerpetuals(): Promise<string[]> {
-  try {
-    const exInfo = await axios.get(
-      'https://fapi.binance.com/fapi/v1/exchangeInfo',
-      { timeout: 10_000 }
-    );
-    let list: string[] = (exInfo.data.symbols || [])
-      .filter((s: any) =>
-        s.status === 'TRADING' &&
-        s.contractType === 'PERPETUAL' &&
-        s.quoteAsset === 'USDT'
-      )
-      .map((s: any) => s.symbol as string)
-      .sort();
-
-    if (POOL_MAX > 0) list = list.slice(0, POOL_MAX);
-    if (SHARD_TOTAL > 1) list = list.filter((_, i) => i % SHARD_TOTAL === SHARD_INDEX);
-    return list;
-  } catch (e: any) {
-    console.warn(`[top-trader-tick] exchangeInfo failed (${e?.response?.status || e.message})`);
-    return [];
-  }
 }
 
 async function main(): Promise<void> {
@@ -74,7 +50,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const pool = await getAllUsdtPerpetuals();
+  const pool = await getUsdtPerpetuals(binanceHttp, { poolMax: POOL_MAX, shardIndex: SHARD_INDEX, shardTotal: SHARD_TOTAL });
   if (pool.length === 0) {
     console.log('[top-trader-tick] no symbols, skip');
     storage.stop();

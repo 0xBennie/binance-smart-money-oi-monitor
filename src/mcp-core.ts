@@ -17,7 +17,7 @@ import { fundingCost } from './funding.js';
 import { isBinanceApiBlocked } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.10.2' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.11.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // Auto-attached to every analysis result. This tool reports on-chain/exchange data
 // and structure — it deliberately does NOT emit buy/sell or directional signals.
@@ -203,53 +203,56 @@ async function toolRenderPush(args: any) {
 // degrade to a clear message instead of crashing the server.
 const DB_HINT = 'This reads the local snapshot DB. Run the tracker (smart-money-tick, ideally in daemon/watchlist mode) so it accumulates history — and better-sqlite3 must be installed.';
 
+// One wrapper for all four DB-backed tools: the dynamic import + the identical
+// "local DB unavailable" degrade. `onError` shapes the error object per tool (with
+// or without `symbol`), the only bit that actually differed between them.
+async function withLocalDb(fn: () => Promise<any>, onError: (msg: string) => any): Promise<any> {
+  try {
+    return await fn();
+  } catch (e: any) {
+    return onError(`local DB unavailable (${e?.message ?? e}). ${DB_HINT}`);
+  }
+}
+
 async function toolGetChange(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
   const minutes = Number(args.minutes) > 0 ? Number(args.minutes) : 60;
-  try {
+  return withLocalDb(async () => {
     const { getChange } = await import('./tracking.js');
     return getChange(symbol, minutes);
-  } catch (e: any) {
-    return { symbol, error: `local DB unavailable (${e?.message ?? e}). ${DB_HINT}` };
-  }
+  }, (msg) => ({ symbol, error: msg }));
 }
 
 async function toolScanExtreme(args: any) {
   const limit = Number(args.limit) > 0 ? Math.min(Number(args.limit), 30) : 10;
   const maxAgeMin = Number(args.maxAgeMin) > 0 ? Number(args.maxAgeMin) : 180;
-  try {
+  return withLocalDb(async () => {
     const { scanExtreme } = await import('./tracking.js');
     return { ...scanExtreme({ limit, maxAgeMin }), disclaimer: DISCLAIMER };
-  } catch (e: any) {
-    return { error: `local DB unavailable (${e?.message ?? e}). ${DB_HINT}` };
-  }
+  }, (msg) => ({ error: msg }));   // market-wide scan: no symbol
 }
 
 async function toolRenderChart(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
   const hours = Number(args.hours) > 0 ? Number(args.hours) : 24;
-  try {
+  return withLocalDb(async () => {
     const { buildChart, renderChartHtml } = await import('./chart.js');
     const data = await buildChart(symbol, hours);
     if (data.rows.length < 2) return { symbol, error: `not enough local history for ${symbol}. ${DB_HINT}` };
     return { symbol, points: data.rows.length, html: renderChartHtml(data), note: 'Save html to a .html file and open/screenshot it.' };
-  } catch (e: any) {
-    return { symbol, error: `local DB unavailable (${e?.message ?? e}). ${DB_HINT}` };
-  }
+  }, (msg) => ({ symbol, error: msg }));
 }
 
 async function toolGetProfitTrend(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
   const minutes = Number(args.minutes) > 0 ? Number(args.minutes) : 60;
-  try {
+  return withLocalDb(async () => {
     const { getProfitTrend } = await import('./tracking.js');
     return getProfitTrend(symbol, minutes);
-  } catch (e: any) {
-    return { symbol, error: `local DB unavailable (${e?.message ?? e}). ${DB_HINT}` };
-  }
+  }, (msg) => ({ symbol, error: msg }));
 }
 
 export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; description: string; properties: any; required?: string[] }> = {

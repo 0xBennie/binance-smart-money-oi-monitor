@@ -2,6 +2,48 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.11.0
+
+An adversarially-verified audit batch — data-integrity, alert reliability, security, and internal consolidation. No breaking API changes (`FundingInfo.markPrice/indexPrice/lastFundingRate` are now `number | null` to stop NaN leaking into output).
+
+**Tracker integrity & liveness**
+- **Force fetch never returns a stale snapshot.** `getSmartMoneyOverview({ force })` (the tracker path) previously fell back to the cached snap — with its OLD `ts` — on a circuit-break or a data-less retry, so `INSERT OR REPLACE` rewrote the existing row and FROZE the time series. Force now returns fresh-or-`null`.
+- **Partial-outage liveness.** The daemon's `STUCK` check only caught a *total* outage (0 rows written); a sweep that captured 1-of-400 symbols looked healthy. Added a second escalation when the fresh-capture yield stays below 25% for 3 consecutive sweeps.
+- **No more false 30s "exceeded" warnings.** The per-symbol `Promise.race` hard-timeout timer was never cleared, so every SUCCESSFUL symbol logged a bogus "exceeded 30000ms" ~30s later and held the event loop open. The timer is now cleared once the race settles; the warning fires only when the timeout actually wins.
+- **One price source everywhere.** The tracker recorded LAST price (`ticker/price`) while the push card + MCP tools render 现价/P&L from MARK price (`premiumIndex`). The tracker now stores `premiumIndex.markPrice`, so 现价 is consistent across every surface.
+- Resolve the watchlist once per sweep (was parsed twice); fetch the symbol pool and price map concurrently.
+
+**Alerts reliability**
+- **Dedup + cooldown.** Alerts re-fired every sweep because `getChange` compares window endpoints (a plateaued move stays ≥ threshold all window) and there was no state. A per-symbol fingerprint (side + direction + bucketed %) now suppresses a repeat within the cooldown (≥ window).
+- **Single-side moves fire.** Dropped the `triggers.length < 2` gate that made a genuine qty move depend on unrelated whale-P&L availability; P&L is now optional context.
+- **From-zero new positions fire.** A brand-new position (0 → big) had `qtyChangePct = null` and was silently blocked; it now fires "多头/空头新建仓".
+- **Short-side P&L.** Whale-P&L context is now computed for short-side events too (was long-only).
+- **Send failures are visible.** `sendTelegram` surfaces the HTTP status/body; the tracker logs `alert NOT sent: … reason`. Sends are spaced 350ms and gated on BOTH token AND chat id.
+
+**Dashboard**
+- **`SM Share` fixed.** It divided gross-both-sides notional by single-sided OI (no `/2`, no clamp) → ~2× every other surface, could exceed 100%. Now uses the library `smartMoneyShareOfOI` helper (0..1, clamped).
+- **CORS no longer wildcard.** `access-control-allow-origin: *` on a loopback server let any visited site read the watchlist cross-origin. CORS is now off by default; opt in with `SMART_MONEY_DASHBOARD_CORS=<origin>` (reflected, `Vary: Origin`).
+- HTML routes (`/`, `/symbol/:symbol`) render a friendly "run the tracker first" page on a missing DB instead of a raw 500.
+
+**Storage**
+- **Read path survives a pre-1.9.4 DB.** Reads that opened their own connection selected `price` unconditionally; a DB whose migration hadn't run threw "no such column: price". Reads now probe `PRAGMA table_info` and select `NULL AS price` when the column is absent (+ a "no such column" hint).
+- Reads reuse the live connection (cached statements) when one is open, instead of opening a new readonly handle per call on the alert hot path.
+- `getDbReadonly` gained the `existsSync` guard its siblings have (throws a typed `MissingDbError`, code `ENOENT`).
+
+**Consolidation / dedup**
+- All three tick scripts (smart-money / oi / top-trader) now share one `getUsdtPerpetuals(binanceHttp, …)` resolver (shared keep-alive pool + used-weight accounting + 6h cache). `oi-tick` / `top-trader-tick` no longer use bare `axios`.
+- Number formatters unified on `format-num.ts` — `format.ts`, the dashboard, and `chart.ts` consume it (added `fmtQty`; `fmtPct` gained a `digits` arg). Removes the divergent percent conventions that caused the 1.9.1 bug.
+- `computePanel` builds its per-side breakdown from the canonical `smartMoneySide()`.
+- The four DB-backed MCP tools share one `withLocalDb` wrapper.
+
+**Correctness**
+- Funding fields (`markPrice`/`indexPrice`/`lastFundingRate`) coerce non-finite → `null`, and the push header tests `Number.isFinite` — no more "FR NaN%".
+- `chart.ts`: each series is materialized once (getVal was called 3×/row); price backfill uses a single two-pointer merge instead of an O(missing×klines) rescan.
+
+**Docs / deploy**
+- `docker-compose.yml` adds an `oi-tick` service (and optional `toptrader`) sharing the `smartmoney-data` volume — without it the dashboard OI / OIΔ / SM-Share columns were permanently empty in the documented deploy.
+- README (EN + 中文) + GUIDE: run the tracker from an installed package via `npx binance-smart-money-oi-monitor-track` (there are multiple bins, not "only the MCP server").
+
 ## 1.10.2
 
 Patch — defensive bounds on a daemon sweep (belt-and-suspenders for flaky proxies).

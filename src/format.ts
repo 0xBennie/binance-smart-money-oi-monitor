@@ -8,6 +8,10 @@
 
 import type { SmartMoneyOverview } from './binance-smart-money.js';
 import type { OpenInterestSnapshot } from './binance-open-interest.js';
+// Shared formatters (single source of truth): fmtUsd (compact USD), fmtPct (0..1 →
+// percent), fmtPrice. Only fmtSignedUsd + bar stay local — they're push-specific
+// presentation (forced +/− sign; unicode profit bar) built ON TOP of fmtUsd.
+import { fmtUsd, fmtPct, fmtPrice } from './format-num.js';
 
 export interface FormatterInput {
   symbol: string;
@@ -24,35 +28,17 @@ export interface FormatterInput {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function fmtUsd(n: number, digits = 2): string {
-  if (!Number.isFinite(n)) return '—';
-  const a = Math.abs(n);
-  if (a >= 1e9) return `$${(n / 1e9).toFixed(digits)}B`;
-  if (a >= 1e6) return `$${(n / 1e6).toFixed(digits)}M`;
-  if (a >= 1e3) return `$${(n / 1e3).toFixed(digits)}K`;
-  return `$${n.toFixed(digits)}`;
-}
-
+/** Signed USD for P&L: forces a leading +/− and delegates scaling to fmtUsd. */
 function fmtSignedUsd(n: number): string {
   if (!Number.isFinite(n)) return '—';
   const sign = n >= 0 ? '+' : '−';
   return sign + fmtUsd(Math.abs(n));
 }
 
-function fmtPct(n: number, digits = 2): string {
-  if (!Number.isFinite(n)) return '—';
-  return n.toFixed(digits) + '%';
-}
-
-function fmtPrice(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return '—';
-  if (n >= 1000) return n.toFixed(2);
-  if (n >= 1) return n.toFixed(4);
-  return n.toPrecision(5);
-}
-
-function bar(pct: number, width = 10): string {
-  const filled = Math.max(0, Math.min(width, Math.round(pct / 100 * width)));
+/** Unicode profit bar from a 0..1 fraction. */
+function bar(frac: number, width = 10): string {
+  const f = Number.isFinite(frac) ? frac : 0;
+  const filled = Math.max(0, Math.min(width, Math.round(f * width)));
   return '▰'.repeat(filled) + '▱'.repeat(width - filled);
 }
 
@@ -98,8 +84,9 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
     ? sm.shortWhalesQty * (sm.shortWhalesAvgEntryPrice - markPrice)
     : NaN;
 
-  const longProfitPct = sm.longWhales > 0 ? (sm.longProfitWhales / sm.longWhales) * 100 : 0;
-  const shortProfitPct = sm.shortWhales > 0 ? (sm.shortProfitWhales / sm.shortWhales) * 100 : 0;
+  // 0..1 fractions — bar() and fmtPct() both take a fraction (fmtPct does the ×100).
+  const longProfitFrac = sm.longWhales > 0 ? sm.longProfitWhales / sm.longWhales : 0;
+  const shortProfitFrac = sm.shortWhales > 0 ? sm.shortProfitWhales / sm.shortWhales : 0;
 
   // Default status to "—" if PnL unknown (markPrice unavailable)
   const longStatus = !haveMarkPrice ? '—' : (longPnl >= 0 ? '📈 盈利中' : '📉 亏损中');
@@ -116,8 +103,8 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
   // Subheader
   const volStr = input.vol24hUsd != null ? fmtUsd(input.vol24hUsd, 2) : '—';
   const oiStr = fmtUsd(oi.oiNowUsd, 2);
-  const frStr = input.fundingRate != null
-    ? `${(input.fundingRate * 100).toFixed(4)}%${input.fundingCountdown ? ' (' + input.fundingCountdown + ')' : ''}`
+  const frStr = Number.isFinite(input.fundingRate)
+    ? `${(input.fundingRate! * 100).toFixed(4)}%${input.fundingCountdown ? ' (' + input.fundingCountdown + ')' : ''}`
     : '—';
   lines.push(`<code>24h Vol ${volStr}  •  OI ${oiStr}  •  FR ${frStr}</code>`);
   lines.push('');
@@ -134,14 +121,14 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
   lines.push(`🟢 <b>多头 ${sm.longWhales} 个鲸鱼</b>  [${longStatus}]`);
   lines.push(`<code>仓位 ${fmtUsd(longUsd)}  •  均价 $${fmtPrice(sm.longWhalesAvgEntryPrice)}</code>`);
   lines.push(`<code>未实现盈亏 ${fmtSignedUsd(longPnl)}</code>`);
-  lines.push(`<code>${bar(longProfitPct)} 盈利比例 ${fmtPct(longProfitPct)}</code>`);
+  lines.push(`<code>${bar(longProfitFrac)} 盈利比例 ${fmtPct(longProfitFrac)}</code>`);
   lines.push('');
 
   // 🔴 空头 card
   lines.push(`🔴 <b>空头 ${sm.shortWhales} 个鲸鱼</b>  [${shortStatus}]`);
   lines.push(`<code>仓位 ${fmtUsd(shortUsd)}  •  均价 $${fmtPrice(sm.shortWhalesAvgEntryPrice)}</code>`);
   lines.push(`<code>未实现盈亏 ${fmtSignedUsd(shortPnl)}</code>`);
-  lines.push(`<code>${bar(shortProfitPct)} 盈利比例 ${fmtPct(shortProfitPct)}</code>`);
+  lines.push(`<code>${bar(shortProfitFrac)} 盈利比例 ${fmtPct(shortProfitFrac)}</code>`);
 
   if (sm.ts) {
     lines.push('');
