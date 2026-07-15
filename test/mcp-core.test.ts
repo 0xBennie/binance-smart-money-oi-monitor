@@ -16,10 +16,26 @@ test('tools/list exposes all five+ tools including render_panel and render_push'
   }
 });
 
-test('initialize reports serverInfo version 1.11.0', async () => {
+test('initialize reports serverInfo version 1.12.0', async () => {
   const resp: any = await handle({ jsonrpc: '2.0', id: 2, method: 'initialize' });
-  assert.equal(resp.result.serverInfo.version, '1.11.0');
-  assert.equal(SERVER_INFO.version, '1.11.0');
+  assert.equal(resp.result.serverInfo.version, '1.12.0');
+  assert.equal(SERVER_INFO.version, '1.12.0');
+});
+
+test('render_panel and render_push expose a lang enum (per-call card language)', async () => {
+  const resp: any = await handle({ jsonrpc: '2.0', id: 6, method: 'tools/list' });
+  const byName = Object.fromEntries(resp.result.tools.map((t: any) => [t.name, t]));
+  for (const name of ['render_panel', 'render_push']) {
+    const lang = byName[name]?.inputSchema?.properties?.lang;
+    assert.ok(lang, `${name} should expose a lang property`);
+    assert.deepEqual(lang.enum, ['zh', 'en']);
+  }
+});
+
+test('editorial DB tools attach the shared disclaimer', () => {
+  for (const name of ['get_change', 'get_profit_trend', 'render_chart']) {
+    assert.match(String(TOOLS[name]!.fn), /DISCLAIMER/, `${name} must attach DISCLAIMER`);
+  }
 });
 
 test('tools/call marks isError=true when a tool returns an error result', async () => {

@@ -8,10 +8,15 @@ import fs from 'node:fs';
 import { preflightBinanceFapi, isBinanceApiBlocked } from '../binance-rate-limit.js';
 import { getSmartMoneyOverview } from '../binance-smart-money.js';
 import { resolveDbPath } from '../storage.js';
+import { doctorVerdict } from './cli-help.js';
 
 const OK = '✅', BAD = '❌', WARN = '⚠️ ';
 const rows: string[] = [];
-const add = (icon: string, label: string, detail = '') => rows.push(`  ${icon} ${label}${detail ? '  — ' + detail : ''}`);
+const blocking: string[] = [];
+const add = (icon: string, label: string, detail = '') => {
+  rows.push(`  ${icon} ${label}${detail ? '  — ' + detail : ''}`);
+  if (icon === BAD) blocking.push(label);
+};
 
 // 1. Node version
 const major = parseInt(process.versions.node.split('.')[0]!, 10);
@@ -61,4 +66,6 @@ if (!fs.existsSync(dbPath)) {
 console.log('\n  binance-smart-money-oi-monitor — doctor\n');
 console.log(rows.join('\n'));
 console.log('');
-process.exit(0);
+const verdict = doctorVerdict(blocking);
+console.log(verdict.line + '\n');
+process.exit(verdict.exitCode);

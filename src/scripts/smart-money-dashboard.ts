@@ -197,8 +197,11 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
     oiChg4h:      (a, b) => Math.abs(b.oi_chg_4h ?? 0) - Math.abs(a.oi_chg_4h ?? 0),
     smShare:      (a, b) => (b.smRatio ?? 0) - (a.smRatio ?? 0),
   };
-  const sortFn = sorters[sort] || sorters.profitDiff;
+  const sortFn = sorters[sort] || sorters.oi;
   const sorted = [...rows].sort(sortFn);
+  const latestTs = rows.reduce((max, row) => Math.max(max, row.ts || 0), 0);
+  const dataAsOf = latestTs > 0 ? fmtTs(latestTs) : '—';
+  const loadedAt = fmtTs(Date.now());
 
   const trs = sorted.map(r => {
     const verdict =
@@ -230,6 +233,8 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
 
   const sortLink = (key: string, label: string) =>
     `<a href="?sort=${key}" class="${sort === key ? 'active' : ''}">${label}</a>`;
+  const emptyRow = '<tr><td colspan="16" class="empty">No snapshots yet — the tracker has not captured a sweep. Check back in a few minutes.</td></tr>';
+  const bodyRows = sorted.length ? trs : emptyRow;
 
   return `<!doctype html>
 <html lang="zh-CN"><head>
@@ -239,12 +244,17 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
   :root { color-scheme: dark; }
   body { font: 13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif; background:#0a0a0a; color:#e4e4e7; margin:0; padding:16px; }
   h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
-  .meta { color:#71717a; font-size:12px; margin-bottom:12px; }
+  .meta { color:#71717a; font-size:12px; margin-bottom:8px; }
+  .toolbar { margin-bottom:8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .search-label { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+  #symbol-search { background:#18181b; border:1px solid #27272a; color:#fafafa; border-radius:6px; padding:5px 10px; font-size:12px; width:min(220px,100%); }
+  #match-count, .sort-label { color:#71717a; font-size:12px; }
   .sortbar { margin-bottom:8px; display:flex; gap:12px; flex-wrap:wrap; font-size:12px; }
   .sortbar a { color:#71717a; text-decoration:none; padding:2px 6px; border-radius:4px; }
   .sortbar a.active { color:#fafafa; background:#27272a; }
   .sortbar a:hover { color:#fafafa; }
-  table { border-collapse:collapse; width:100%; font-size:12px; }
+  .table-wrap { overflow-x:auto; border:1px solid #18181b; border-radius:6px; }
+  table { border-collapse:collapse; width:100%; min-width:1120px; font-size:12px; }
   th, td { padding:6px 8px; text-align:right; border-bottom:1px solid #18181b; white-space:nowrap; }
   th { background:#18181b; color:#a1a1aa; font-weight:500; text-align:right; position:sticky; top:0; }
   th:first-child, td:first-child { text-align:left; }
@@ -253,29 +263,42 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
   td.g { color:#86efac; }
   td.r { color:#fca5a5; }
   td.ts { color:#52525b; font-size:11px; }
+  td.empty { text-align:center; color:#a1a1aa; padding:32px 8px; font-size:13px; }
   tr:hover { background:#18181b; }
+  details.legend { margin-top:14px; color:#a1a1aa; font-size:12px; }
+  details.legend summary { cursor:pointer; color:#71717a; }
+  details.legend dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; margin:10px 0 0; max-width:720px; }
+  details.legend dt { color:#fafafa; white-space:nowrap; }
+  details.legend dd { margin:0; }
 </style></head>
 <body>
   <h1>Smart Money Dashboard</h1>
-  <div class="meta">${sorted.length} symbols · source: <code>binance bapi/futures/v1/public/future/smart-money/signal/overview</code> · refresh hourly</div>
+  <div class="meta">${sorted.length} symbols · source: <code>binance bapi/futures/v1/public/future/smart-money/signal/overview</code></div>
+  <div class="meta">Data as of ${dataAsOf} UTC · Loaded ${loadedAt} UTC</div>
+  <div class="toolbar">
+    <label class="search-label" for="symbol-search">Filter by symbol</label>
+    <input id="symbol-search" type="search" placeholder="Filter by symbol…" autocomplete="off" spellcheck="false">
+    <span id="match-count"></span>
+  </div>
   <div class="sortbar">
-    <span style="color:#a1a1aa">sort:</span>
+    <span class="sort-label">sort:</span>
+    ${sortLink('oi', 'OI (USD)')}
+    ${sortLink('symbol', 'A-Z')}
     ${sortLink('profitDiff', 'Profit Diff')}
     ${sortLink('whaleDiff', 'Whale Profit Diff')}
     ${sortLink('priceSpread', 'Whale Avg Spread')}
     ${sortLink('longShort', 'LSR Extreme')}
     ${sortLink('whales', 'Whale Count')}
-    ${sortLink('oi', 'OI (USD)')}
     ${sortLink('oiChg1h', 'OI Δ 1h')}
     ${sortLink('oiChg4h', 'OI Δ 4h')}
     ${sortLink('smShare', 'SM Share')}
-    ${sortLink('symbol', 'A-Z')}
   </div>
+  <div class="table-wrap">
   <table>
     <thead><tr>
       <th>Symbol</th>
-      <th>Traders (Whales)</th>
-      <th>LSR</th>
+      <th title="Total smart-money traders; Whales are the top 20% by margin balance">Traders (Whales)</th>
+      <th title="Long/Short Ratio: above 1 is net long, below 1 is net short">LSR</th>
       <th>Long Profit%</th>
       <th>Short Profit%</th>
       <th>Long Whale Profit%</th>
@@ -286,12 +309,44 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
       <th>OI</th>
       <th>OI Δ1h</th>
       <th>OI Δ4h</th>
-      <th>SM Share</th>
+      <th title="Smart Money notional divided by 2 × total OI, clamped to 100%">SM Share</th>
       <th>Verdict</th>
       <th>Updated</th>
     </tr></thead>
-    <tbody>${trs}</tbody>
+    <tbody id="dashboard-rows">${bodyRows}</tbody>
   </table>
+  </div>
+  <details class="legend">
+    <summary>图例 / Legend</summary>
+    <dl>
+      <dt>LSR</dt><dd>Smart-money long ÷ short ratio.</dd>
+      <dt>SM Share</dt><dd>Smart Money share of total OI, clamped to 100%.</dd>
+      <dt>Spread</dt><dd>Difference between short- and long-whale average entries.</dd>
+      <dt>🟢 / 🔴 / 🟡 / ⚪</dt><dd>Profit-gap verdict from strong long advantage to balanced positioning.</dd>
+    </dl>
+  </details>
+  <script>
+    (function () {
+      var input = document.getElementById('symbol-search');
+      var tbody = document.getElementById('dashboard-rows');
+      var count = document.getElementById('match-count');
+      if (!input || !tbody || !count) return;
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function (row) {
+        return row.querySelector('td a');
+      });
+      input.addEventListener('input', function () {
+        var query = input.value.trim().toUpperCase();
+        var shown = 0;
+        rows.forEach(function (row) {
+          var link = row.querySelector('td a');
+          var match = !query || (link && link.textContent.toUpperCase().indexOf(query) !== -1);
+          row.hidden = !match;
+          if (match) shown++;
+        });
+        count.textContent = query ? shown + ' / ' + rows.length + ' match' : '';
+      });
+    })();
+  </script>
 </body></html>`;
 }
 
@@ -359,7 +414,7 @@ if (CORS_ORIGIN) {
 }
 
 app.get('/', (req, res) => {
-  const sort = String(req.query.sort || 'profitDiff');
+  const sort = String(req.query.sort || 'oi');
   try {
     const rows = getLatestSnapshots();
     res.set('content-type', 'text/html; charset=utf-8').send(renderHtml(rows, sort));

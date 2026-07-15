@@ -51,3 +51,51 @@ test('push card footer carries the X promo + not-advice disclaimer', () => {
   assert.ok(html.includes('x.com/0xBenniee'), 'X/Twitter promo on the shared TG card');
   assert.ok(html.includes('非投资建议') || html.includes('not financial advice'), 'disclaimer on the TG card');
 });
+
+test("lang='en' renders English labels and no Chinese jargon", () => {
+  const html = formatSmartMoneyPush({ symbol: 'BEATUSDT', sm, oi, price: 2.9 }, 'en');
+  assert.match(html, /Whale Overview/);
+  assert.match(html, /Total Position/);
+  assert.match(html, /Notional L\/S Ratio/);
+  assert.match(html, /\bLong\b/);
+  assert.match(html, /\bShort\b/);
+  assert.match(html, /whales/);
+  assert.match(html, /Avg Entry/);
+  assert.match(html, /Unrealized PnL/);
+  assert.match(html, /In-Profit %/);
+  assert.match(html, /24h Volume/);
+  assert.match(html, /Open Interest/);
+  assert.match(html, /Funding Rate/);
+  assert.match(html, /in profit/);
+  assert.match(html, /in loss/);
+  assert.ok(!html.includes('巨鲸总览'));
+  assert.ok(!html.includes('总持仓'));
+  assert.ok(!html.includes('多头') && !html.includes('空头'));
+  assert.ok(!html.includes('盈利中') && !html.includes('亏损中'));
+  assert.ok(!html.includes('均价') && !html.includes('仓位'));
+  assert.doesNotMatch(html, /\bFR\b/);
+  assert.ok(html.includes('x.com/0xBenniee'));
+  assert.ok(html.includes('not financial advice'));
+});
+
+test('default language stays Chinese and explicit language overrides env', () => {
+  const input = { symbol: 'BEATUSDT', sm, oi, price: 2.9 };
+  const prev = process.env.SMART_MONEY_CARD_LANG;
+  try {
+    delete process.env.SMART_MONEY_CARD_LANG;
+    assert.equal(formatSmartMoneyPush(input), formatSmartMoneyPush(input, 'zh'));
+    process.env.SMART_MONEY_CARD_LANG = 'en';
+    assert.match(formatSmartMoneyPush(input), /Whale Overview/);
+    assert.match(formatSmartMoneyPush(input, 'zh'), /巨鲸总览/);
+  } finally {
+    if (prev === undefined) delete process.env.SMART_MONEY_CARD_LANG;
+    else process.env.SMART_MONEY_CARD_LANG = prev;
+  }
+});
+
+test("plain variant honours lang='en'", () => {
+  const plain = formatSmartMoneyPushPlain({ symbol: 'BEATUSDT', sm, oi, price: 2.9 }, 'en');
+  assert.match(plain, /Whale Overview/);
+  assert.ok(!plain.includes('<b>'));
+  assert.ok(!plain.includes('巨鲸总览'));
+});

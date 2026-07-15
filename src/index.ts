@@ -40,6 +40,7 @@ export {
   formatSmartMoneyPush,
   formatSmartMoneyPushPlain,
   type FormatterInput,
+  type CardLang,
 } from './format.js';
 
 export { fmtUsd, fmtPct, fmtChg, fmtPrice, fmtQty } from './format-num.js';

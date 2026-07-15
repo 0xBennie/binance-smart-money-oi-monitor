@@ -15,6 +15,7 @@ import { getOpenInterest, type OpenInterestSnapshot } from './binance-open-inter
 import { getTopTraderSnapshot, type TopTraderSnapshot } from './binance-top-trader.js';
 import { normalizeSymbol } from './symbol.js';
 import { fmtUsd, fmtPct, fmtChg, fmtPrice } from './format-num.js';
+import { resolveCardLang, type CardLang } from './format.js';
 
 export interface PanelSide {
   traders: number;
@@ -117,26 +118,48 @@ export async function buildPanel(symbol: string): Promise<PanelData | null> {
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
+const PANEL_LABELS = {
+  zh: {
+    overview: '聪明钱总览', totalPosition: '总持仓', traders: '交易者', ratio: '名义多空比',
+    long: '多头', short: '空头', traderUnit: '交易员', whaleUnit: '大户',
+    inProfit: '↗ 盈利中', inLoss: '↘ 亏损中', position: '当前仓位', avgEntry: '平均开仓价',
+    estimatedPnl: '预估 PNL', profitPct: '盈利比例', topLsr: '头部持仓LSR',
+    takerBsr: 'Taker买卖比', smOfOi: 'SM占OI', totalOi: '总OI',
+  },
+  en: {
+    overview: 'Smart Money Overview', totalPosition: 'Total Position', traders: 'traders', ratio: 'Notional L/S Ratio',
+    long: 'Long', short: 'Short', traderUnit: 'traders', whaleUnit: 'whales',
+    inProfit: '↗ in profit', inLoss: '↘ in loss', position: 'Position', avgEntry: 'Avg Entry',
+    estimatedPnl: 'Est. PnL', profitPct: 'In-Profit %', topLsr: 'Top-Trader Long/Short',
+    takerBsr: 'Taker Buy/Sell Ratio', smOfOi: 'Smart Money % of Open Interest', totalOi: 'Total Open Interest',
+  },
+} satisfies Record<CardLang, Record<string, string>>;
+
 /** Self-contained dark HTML for the panel (no external assets). */
-export function renderPanelHtml(d: PanelData): string {
+export function renderPanelHtml(d: PanelData, lang?: CardLang): string {
+  const cardLang = resolveCardLang(lang);
+  const L = PANEL_LABELS[cardLang];
   // Escape (no injection) AND cap length (a junk/meme ticker can't break the card).
   const base = esc(d.symbol.replace(/USDT$/, '').slice(0, 20));
   const longPct = Math.max(2, Math.min(98, (Number.isFinite(d.longShareOfTotal) ? d.longShareOfTotal : 0.5) * 100));
   const when = new Date(d.generatedAt).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
   const side = (label: string, s: PanelSide, up: boolean) => {
     const col = up ? '#2ebd85' : '#f6465d';
-    const state = s.pnlUsd == null ? '' : s.pnlUsd >= 0 ? '↗ 盈利中' : '↘ 亏损中';
+    const state = s.pnlUsd == null ? '' : s.pnlUsd >= 0 ? L.inProfit : L.inLoss;
+    const cohort = cardLang === 'en'
+      ? `${s.traders} ${L.traderUnit} (${s.whales} ${L.whaleUnit})`
+      : `${s.traders} ${L.traderUnit}（${s.whales} ${L.whaleUnit}）`;
     return `
     <div style="border:1px solid ${col}33;background:${col}14;border-radius:10px;padding:14px 16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span style="color:${col};font-weight:600">${up ? '▲' : '▼'} ${label} · ${s.traders} 交易员（${s.whales} 大户）</span>
+        <span style="color:${col};font-weight:600">${up ? '▲' : '▼'} ${label} · ${cohort}</span>
         <span style="color:${col};font-size:13px">${state}</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:14px;color:#b7bdc6">
-        <span>当前仓位 <b style="color:#eaecef;font-weight:500">${fmtUsd(s.notionalUsd)}</b></span>
-        <span>平均开仓价 <b style="color:#eaecef;font-weight:500">${fmtPrice(s.avgEntry)}</b></span>
-        <span>预估 PNL <b style="color:${col};font-weight:500">${fmtUsd(s.pnlUsd)}</b></span>
-        <span>盈利比例 <b style="color:${col};font-weight:500">${fmtPct(s.profitPct)}</b></span>
+        <span>${L.position} <b style="color:#eaecef;font-weight:500">${fmtUsd(s.notionalUsd)}</b></span>
+        <span>${L.avgEntry} <b style="color:#eaecef;font-weight:500">${fmtPrice(s.avgEntry)}</b></span>
+        <span>${L.estimatedPnl} <b style="color:${col};font-weight:500">${fmtUsd(s.pnlUsd)}</b></span>
+        <span>${L.profitPct} <b style="color:${col};font-weight:500">${fmtPct(s.profitPct)}</b></span>
       </div>
       <div style="margin-top:10px;height:6px;border-radius:99px;background:#2b3139;overflow:hidden">
         <div style="width:${Math.max(0, Math.min(100, s.profitPct * 100)).toFixed(1)}%;height:6px;border-radius:99px;background:${col}"></div>
@@ -146,33 +169,33 @@ export function renderPanelHtml(d: PanelData): string {
   const stat = (label: string, val: string) =>
     `<div style="min-width:92px"><div style="color:#848e9c;font-size:12px">${label}</div><div style="color:#eaecef;font-size:16px;margin-top:2px">${val}</div></div>`;
 
-  return `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+  return `<!doctype html><html lang="${cardLang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${base} 聪明钱总览</title></head>
+<title>${base} ${L.overview}</title></head>
 <body style="margin:0;background:#0b0e11;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif">
 <div style="max-width:520px;margin:24px auto;background:#151a21;border:1px solid #2b3139;border-radius:14px;overflow:hidden">
   <div style="padding:16px 18px 12px">
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <div style="color:#eaecef;font-size:18px;font-weight:600;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${base} <span style="color:#848e9c;font-size:13px;font-weight:400">聪明钱总览</span></div>
+      <div style="color:#eaecef;font-size:18px;font-weight:600;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${base} <span style="color:#848e9c;font-size:13px;font-weight:400">${L.overview}</span></div>
       <div style="color:#848e9c;font-size:12px">${d.price != null ? '$' + fmtPrice(d.price) : ''}</div>
     </div>
     <div style="display:flex;gap:20px;flex-wrap:wrap;margin:14px 0 12px">
-      ${stat('总持仓', fmtUsd(d.totalNotionalUsd))}
-      ${stat('交易者', String(d.totalTraders))}
-      ${stat('名义多空比', d.longShortNotionalRatio != null ? d.longShortNotionalRatio.toFixed(2) : '—')}
+      ${stat(L.totalPosition, fmtUsd(d.totalNotionalUsd))}
+      ${stat(L.traders, String(d.totalTraders))}
+      ${stat(L.ratio, d.longShortNotionalRatio != null ? d.longShortNotionalRatio.toFixed(2) : '—')}
     </div>
     <div style="display:flex;height:8px;border-radius:99px;overflow:hidden">
       <div style="width:${longPct}%;background:#2ebd85"></div><div style="flex:1;background:#f6465d"></div>
     </div>
   </div>
   <div style="padding:0 18px 14px;display:flex;flex-direction:column;gap:12px">
-    ${side('多头', d.long, true)}
-    ${side('空头', d.short, false)}
+    ${side(L.long, d.long, true)}
+    ${side(L.short, d.short, false)}
     <div style="display:flex;gap:18px;flex-wrap:wrap;padding-top:2px;font-size:13px;color:#b7bdc6">
-      <span>头部持仓LSR <b style="color:#eaecef;font-weight:500">${d.topPositionLsr != null ? d.topPositionLsr.toFixed(2) : '—'}</b></span>
-      <span>Taker买卖比 <b style="color:#eaecef;font-weight:500">${d.takerBsr != null ? d.takerBsr.toFixed(2) : '—'}</b></span>
-      <span>SM占OI <b style="color:#eaecef;font-weight:500">${fmtPct(d.smShareOfOI)}</b></span>
-      <span>总OI <b style="color:#eaecef;font-weight:500">${fmtUsd(d.oiNowUsd)}</b> <span style="color:${(d.oiChg4h ?? 0) >= 0 ? '#2ebd85' : '#f6465d'}">${fmtChg(d.oiChg4h)}(4h)</span></span>
+      <span>${L.topLsr} <b style="color:#eaecef;font-weight:500">${d.topPositionLsr != null ? d.topPositionLsr.toFixed(2) : '—'}</b></span>
+      <span>${L.takerBsr} <b style="color:#eaecef;font-weight:500">${d.takerBsr != null ? d.takerBsr.toFixed(2) : '—'}</b></span>
+      <span>${L.smOfOi} <b style="color:#eaecef;font-weight:500">${fmtPct(d.smShareOfOI)}</b></span>
+      <span>${L.totalOi} <b style="color:#eaecef;font-weight:500">${fmtUsd(d.oiNowUsd)}</b> <span style="color:${(d.oiChg4h ?? 0) >= 0 ? '#2ebd85' : '#f6465d'}">${fmtChg(d.oiChg4h)}(4h)</span></span>
     </div>
   </div>
   <div style="padding:12px 18px;border-top:1px solid #2b3139;color:#5e6673;font-size:11px">
