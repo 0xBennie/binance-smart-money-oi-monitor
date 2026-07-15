@@ -40,6 +40,9 @@ claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest
 - 「BILL 现在什么持仓结构」→ 走 `get_full_picture`
 - 「给 BEAT 出个看板卡」→ 走 `render_panel`
 
+卡片默认中文。要英文卡片，可设置 `SMART_MONEY_CARD_LANG=en`，或在
+`render_panel` / `render_push` 调用中传 `lang: "en"`。
+
 > ⚠️ 时序 4 工具(change/trend/scan/chart)零部署下是空的 —— 它们要读本地 tracker DB,见模式 B。
 > ⚠️ 已注册过要升级:`claude mcp remove smartmoney` 再 add(npx 会缓存旧版)。
 
@@ -65,12 +68,17 @@ npm run track           # 常驻,每 15 分钟记一针
 **2) 攒够 ≥2 针后,随时查:**
 
 ```bash
-SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run change BILL 30   # 近30m 多空各加减多少张(含鲸鱼)
-SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run trend  BILL 120  # 盈利占比 120m 变化
-SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run scan   20        # 全市场最偏多/偏空 top20
-SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run chart  BILL      # 生成三面板 HTML 图
+SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run change -- BILL 30   # 近30m 多空各加减多少张(含鲸鱼)
+SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run trend -- BILL 120   # 盈利占比 120m 变化
+SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run scan -- 20        # 全市场最偏多/偏空 top20
+SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run chart -- BILL      # 生成三面板 HTML 图
 npm run dashboard                                              # Web 看板(默认只绑 127.0.0.1)
 ```
+
+`change` / `trend` 默认输出人类可读表格；机器读取时用
+`npm run --silent change -- BILL 30 --json`，避免 npm 自己的横幅混进 JSON。
+`npm run doctor` 最后给出 READY / NOT READY，只有阻断项会返回非零退出码。
+看板支持币种搜索、数据时间/加载时间、字段图例和移动端横向滚动；空库时会显示启动 tracker 的指引。
 
 > npm-install(非 clone)用户也能跑 tracker:`npx binance-smart-money-oi-monitor-track`(带同样的 env)。
 

@@ -48,6 +48,29 @@ This repo solves that.
 
 ---
 
+## Quick start
+
+**Fastest path — no clone and no build.** Register the MCP server with your AI
+client; `npx` downloads and runs the current package:
+
+```bash
+claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest
+```
+
+Then ask your AI “what is the smart-money positioning on ETH?” It will call
+`get_full_picture`. The seven live tools work immediately, hit Binance live,
+and need no local database.
+
+> The four time-series tools (`get_change`, `get_profit_trend`, `scan_extreme`,
+> `render_chart`) need tracker history. Follow [Run from a clone](#run-from-a-clone)
+> and point the tracker, dashboard, and MCP server to the same absolute
+> `SMART_MONEY_DB_PATH`.
+
+All supported environment variables are documented in [`.env.example`](.env.example)
+and the [Env vars](#env-vars) table.
+
+---
+
 ## What you get vs. public fapi
 
 | Field | Public `fapi/data` | This repo |
@@ -158,7 +181,10 @@ multi-hour hard block is to retry-loop a 418 — don't.
 
 ---
 
-## Quick start
+## Run from a clone
+
+Clone the repository when you want the tracker, local time-series history, or
+the browser dashboard:
 
 ```bash
 git clone https://github.com/0xBennie/binance-smart-money-oi-monitor.git
@@ -178,14 +204,33 @@ npx tsx src/scripts/top-trader-tick.ts
 
 ### Env vars
 
+Every variable is optional. Copy [`.env.example`](.env.example) to `.env`, then
+uncomment only what you need. Keep tokens out of Git.
+
 | Var | Default | What |
 |---|---|---|
-| `SMART_MONEY_POOL_MAX` | `0` | Cap of symbols. **0 = all USDT-PERPETUAL** (~500). Set to e.g. `100` to limit |
+| `SMART_MONEY_DB_PATH` | `<cwd>/data/snapshots.db` | Absolute path to the shared SQLite DB. Tracker, dashboard, and time-series MCP tools must use the same file |
+| `SMART_MONEY_WATCHLIST` | *(none)* | Comma-separated symbols, such as `BTC,ETH,SOL`; empty means the full market |
+| `SMART_MONEY_WATCHLIST_FILE` | `watchlist.json` | JSON array or `{ "symbols": [...] }` file; entries are combined with `SMART_MONEY_WATCHLIST` |
+| `SMART_MONEY_INTERVAL_MIN` | `0` | `0` runs one sweep and exits; a positive value enables the self-scheduling daemon |
+| `SMART_MONEY_POOL_MAX` | `0` | Maximum Smart Money symbols per sweep; `0` means all USDT perpetuals |
 | `SMART_MONEY_SHARD_INDEX` | `0` | 0-based shard index when sharding (see below) |
 | `SMART_MONEY_SHARD_TOTAL` | `1` | Total shards. `1` = no sharding |
-| `TOP_TRADER_POOL_MAX` / `_SHARD_INDEX` / `_SHARD_TOTAL` | same | Same semantics for top-trader cron |
-| `OI_POOL_MAX` / `_SHARD_INDEX` / `_SHARD_TOTAL` | same | Same for open-interest cron |
-| `SMART_MONEY_DASHBOARD_PORT` / `PORT` | `3001` | Dashboard listen port |
+| `TOP_TRADER_POOL_MAX` | `0` | Maximum top-trader symbols; `0` means all |
+| `TOP_TRADER_SHARD_INDEX` | `0` | 0-based top-trader shard index |
+| `TOP_TRADER_SHARD_TOTAL` | `1` | Total top-trader shards |
+| `OI_POOL_MAX` | `0` | Maximum OI symbols; `0` means all |
+| `OI_SHARD_INDEX` | `0` | 0-based OI shard index |
+| `OI_SHARD_TOTAL` | `1` | Total OI shards |
+| `SMART_MONEY_DASHBOARD_HOST` | `127.0.0.1` | Dashboard bind host; `0.0.0.0` exposes it to the network |
+| `SMART_MONEY_DASHBOARD_PORT` | `3001` | Dashboard listen port |
+| `SMART_MONEY_DASHBOARD_CORS` | *(off)* | Exact allowed browser origin; wildcard CORS is not used |
+| `PORT` | `3001` | Legacy dashboard-port fallback |
+| `SMART_MONEY_CARD_LANG` | `zh` | Default `render_panel` / `render_push` language: `zh` or `en`; a per-call `lang` overrides it |
+| `SMART_MONEY_ALERT_TG_TOKEN` | *(none)* | Telegram bot token; alerts remain off unless token and chat ID are both set |
+| `SMART_MONEY_ALERT_TG_CHAT_ID` | *(none)* | Telegram target chat ID |
+| `SMART_MONEY_ALERT_WINDOW_MIN` | `30` | Alert lookback window in minutes |
+| `SMART_MONEY_ALERT_QTY_PCT` | `5` | Absolute quantity-change percentage that triggers an alert |
 | `HTTPS_PROXY` / `HTTP_PROXY` | *(none)* | Route **all** Binance calls through this proxy (e.g. `http://host:port`) — for geo-restricted regions. Direct connection when unset (added 1.9.3) |
 | `NO_PROXY` | *(none)* | Comma-separated hosts to bypass the proxy for (standard `NO_PROXY` semantics) |
 
@@ -260,6 +305,10 @@ npm run dashboard          # PORT=3001 by default
 curl -s localhost:3001/api/snapshots | jq '.[0]'
 ```
 
+The HTML dashboard includes symbol search, a match count, data/load timestamps,
+field tooltips and a compact legend. Its table scrolls horizontally on narrow
+screens, and an empty DB shows tracker-start guidance instead of a blank page.
+
 > The API serves what the cron has written to `data/snapshots.db`. Run the
 > tracker (`npm run smart-money:tick`) at least once first, or the responses are empty.
 
@@ -270,33 +319,38 @@ The bundled MCP server exposes the **live** Smart Money / Top Trader / OI librar
 cron or local database needed. It works with any MCP-compatible client:
 **Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, Windsurf, Cline, Zed, Continue**, …
 
-**Register it with one line — no clone, no build.** Point
-your AI client at `npx -y binance-smart-money-oi-monitor`:
+**Register it with one line — no clone, no build:**
 
-> **Updating:** `npx` caches the package — to move to the latest version, re-add it (`claude mcp remove binance-smart-money && claude mcp add …`) or run `npx clear-npx-cache`, then restart your client.
+```bash
+claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest
+```
+
+> **Updating:** `npx` caches packages. To force an update, remove and re-add
+> `smartmoney`, or clear the npx cache, then restart the client.
+
+Equivalent JSON configuration:
 
 ```json
 {
   "mcpServers": {
-    "binance-smart-money": {
+    "smartmoney": {
       "command": "npx",
-      "args": ["-y", "binance-smart-money-oi-monitor"]
+      "args": ["-y", "binance-smart-money-oi-monitor@latest"]
     }
   }
 }
 ```
 
-Or add it to Claude Code from the shell:
-
-```bash
-claude mcp add binance-smart-money -- npx -y binance-smart-money-oi-monitor
-```
-
 `npx` downloads the package, runs the `binance-smart-money-oi-monitor` bin (the MCP
 server), and your AI gets the 11 tools below (7 live + 4 that read the local tracker
 DB). The server is pure stdio JSON-RPC and loads **no** native module until you call
-a DB-backed tool (`get_change` / `scan_extreme` / `render_chart`) — the seven live
+a DB-backed tool (`get_change` / `get_profit_trend` / `scan_extreme` / `render_chart`) — the seven live
 tools stay native-free (no `better-sqlite3`/`express` loaded).
+
+> **Time-series tools need a shared DB.** Put an absolute
+> `SMART_MONEY_DB_PATH` in the MCP process environment and run the tracker with
+> the same value. Otherwise each process can fall back to a different
+> `cwd/data/snapshots.db` and correctly report no history.
 
 <details>
 <summary>Running from a clone instead (no npm publish needed)</summary>
@@ -304,10 +358,13 @@ tools stay native-free (no `better-sqlite3`/`express` loaded).
 ```json
 {
   "mcpServers": {
-    "binance-smart-money": {
+    "smartmoney": {
       "command": "npx",
       "args": ["tsx", "src/scripts/mcp-server.ts"],
-      "cwd": "/absolute/path/to/binance-smart-money-oi-monitor"
+      "cwd": "/absolute/path/to/binance-smart-money-oi-monitor",
+      "env": {
+        "SMART_MONEY_DB_PATH": "/absolute/path/to/binance-smart-money-oi-monitor/data/snapshots.db"
+      }
     }
   }
 }
@@ -325,14 +382,14 @@ or just `npm run mcp` to launch the stdio server in the foreground.
 | `get_open_interest` | `symbol` | Total OI (USD + coins) + 5m/15m/1h/4h velocity |
 | `get_full_picture` | `symbol`, `period?` | Per-side smart-money + whale positions, top-trader flow, OI + SM's share of OI — the one-shot "what's the positioning on X" call |
 | `get_funding` | `symbol`, `notionalUsd?` | Funding rate → annualized % + the USD you pay/receive per settlement / day / year on a position (default $10k); detects the real 8h/4h/1h interval |
-| `render_panel` | `symbol`, `includeHtml?` | Shareable dark-HTML Smart Money card (Smart Signal look) — returns `{ summary, html }`; pass `includeHtml:false` for summary-only |
-| `render_push` | `symbol` | Telegram `巨鲸总览` card as a `parse_mode:HTML` message body — the compact card to send straight to a chat (vs `render_panel`'s full standalone page) |
+| `render_panel` | `symbol`, `includeHtml?`, `lang?` | Shareable dark-HTML Smart Money card; `lang` is `zh` or `en`; returns `{ summary, html, disclaimer }` |
+| `render_push` | `symbol`, `lang?` | Telegram `parse_mode:HTML` card in Chinese or English; returns the message plus a data-not-advice disclaimer |
 | `get_change` | `symbol`, `minutes?` | How much each side **added/reduced** over the last N min (qty, not USD) — from the local DB; needs the tracker running |
 | `scan_extreme` | `limit?`, `maxAgeMin?` | Market-wide **most long-heavy / most short-heavy** symbols by smart-money LSR — from the local DB |
 | `render_chart` | `symbol`, `hours?` | Time-series **dark-HTML chart** — 3 line panels: long position (qty), short position (qty), and 庄家(whale) avg entry vs mark price — from the local DB |
 | `get_profit_trend` | `symbol`, `minutes?` | How each side's **% in profit** (traders + whales) moved over N min — catches a flip from mostly-losing to mostly-winning; from the local DB |
 
-The last three read the **local snapshot DB** (see [Track over time](#track-over-time-local-db)); the rest hit Binance live and need no DB.
+The last four read the **local snapshot DB** (see [Track over time](#track-over-time-local-db)); the rest hit Binance live and need no DB. Interpretive outputs include a data-not-advice disclaimer; raw metric tools do not duplicate it.
 
 Example `get_full_picture ETH` result:
 
@@ -354,8 +411,12 @@ Turn any symbol's whale positioning into a self-contained dark HTML card (the
 binance.com Smart Signal look) — screenshot it for a post, or embed the string.
 
 ```bash
-npm run panel BEAT          # writes beatusdt-panel.html; open it & screenshot
+npm run panel -- BEAT       # writes beatusdt-panel.html; open it & screenshot
 ```
+
+Cards default to Chinese for backward compatibility. Set
+`SMART_MONEY_CARD_LANG=en`, or pass `lang: "en"` to `render_panel` /
+`render_push`, for expanded English labels.
 
 Three ways, same card:
 
@@ -411,9 +472,11 @@ It writes to `data/snapshots.db` (30-day retention).
 **2. Query the accumulated history:**
 
 ```bash
-npm run change MAGMA 15    # → "多头加仓 300，空头减仓 200" (qty deltas over ~15 min)
+npm run change -- MAGMA 15 # human-readable table (qty deltas over ~15 min)
+npm run trend -- MAGMA 120 # trader/whale in-profit percentage trend
+npm run --silent change -- MAGMA 15 --json # machine-readable output without npm banners
 npm run scan               # → most long-heavy / most short-heavy symbols by LSR
-npm run chart BEAT 24      # → beat-chart.html: long/short position + avg entry over 24h
+npm run chart -- BEAT 24   # → beat-chart.html: long/short position + avg entry over 24h
 ```
 
 Same three as library calls (`getChange`, `scanExtreme`, `buildChart`/`renderChartHtml`)
@@ -428,15 +491,17 @@ From a clone (`npm run <cmd>`). `binance-smart-money-oi-monitor --help` / `--ver
 
 | Command | What |
 |---|---|
-| `npm run analyze <SYM>` | one-shot readable report for a coin (below) |
-| `npm run panel <SYM>` | shareable dark-HTML Smart Money card |
-| `npm run doctor` | diagnose Binance reachability / DB / native deps |
+| `npm run analyze -- <SYM>` | one-shot readable report for a coin (below) |
+| `npm run panel -- <SYM>` | shareable dark-HTML Smart Money card |
+| `npm run doctor` | diagnose Binance reachability / DB / native deps; final READY/NOT READY verdict is CI-gateable |
 | `npm run track` | tracker daemon (`SMART_MONEY_WATCHLIST`, `SMART_MONEY_INTERVAL_MIN`) |
-| `npm run change <SYM> [min]` · `scan` · `chart <SYM>` | time-series (need the tracker) |
+| `npm run change -- <SYM> [min] [--json]` | position-change table, or JSON; needs tracker history |
+| `npm run trend -- <SYM> [min] [--json]` | in-profit trend table, or JSON; needs tracker history |
+| `npm run scan` · `npm run chart -- <SYM>` | market scan / HTML chart; need tracker history |
 | `npm run dashboard` | Express dashboard + JSON API (`PORT=3001`) |
 | `npm run mcp` | MCP stdio server |
 
-`npm run analyze BEAT` prints:
+`npm run analyze -- BEAT` prints:
 
 ```
   BEAT  聪明钱分析   现价 $0.11

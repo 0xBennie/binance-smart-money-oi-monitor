@@ -2,6 +2,29 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.12.0
+
+Selective UX integration built on the released `1.11.0` codebase. No breaking
+API changes and no changes to OI, funding, profit, ratio, or notional units.
+
+**Onboarding and documentation**
+- Added a commented `.env.example` and complete, equivalent environment-variable tables in both READMEs.
+- Added a zero-install MCP quick start and one canonical install command: `claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest`.
+- Made the shared absolute `SMART_MONEY_DB_PATH` requirement explicit for tracker, dashboard, and all four time-series MCP tools.
+- Added automated documentation contracts for release-version parity, env coverage, MCP commands, CLI examples, unique headings, and local anchors.
+
+**Cards and MCP**
+- `render_panel`, `render_push`, and their library renderers accept `lang: 'zh' | 'en'`; precedence is explicit argument, `SMART_MONEY_CARD_LANG`, then backward-compatible Chinese.
+- English cards expand FR, LSR, and SM labels. Numeric values and percentage semantics remain unchanged.
+- Ratio output now explains direction (`long ÷ short`; values above 1 mean the numerator dominates).
+- Interpretive MCP outputs consistently include the data-not-advice disclaimer, including `get_change`, `get_profit_trend`, and `render_chart`; raw single-metric tools do not duplicate it.
+
+**CLI and dashboard**
+- `change` and `trend` now print readable tables by default, support `--json`, provide `--help`, and return non-zero on data errors.
+- `doctor` prints a final READY / NOT READY verdict and fails only for blocking checks.
+- Dashboard defaults to OI sorting and adds symbol search, match count, empty-state guidance, field legend/tooltips, data/load timestamps, and mobile horizontal scrolling.
+- Missing-DB onboarding remains handled by the guarded `1.11.0` storage path and is covered by an HTTP route regression test.
+
 ## 1.11.0
 
 An adversarially-verified audit batch — data-integrity, alert reliability, security, and internal consolidation. No breaking API changes (`FundingInfo.markPrice/indexPrice/lastFundingRate` are now `number | null` to stop NaN leaking into output).
