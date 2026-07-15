@@ -350,14 +350,16 @@ SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA SMART_MONEY_INTERVAL_MIN=15 npm run track
 > **把 `SMART_MONEY_DB_PATH` 设成绝对路径**，让 tracker 和 MCP server / 看板读**同一个库**，
 > 否则各自回落到自己 `cwd/data/snapshots.db`，时序工具会静默读到空库。（docker compose 已帮你设好。）
 
-> **通过 npm 安装（非 clone）？** `bin` 只启动 MCP server，而 `npm run track` 只在 clone 里存在。
-> 要从已安装的包里跑 tracker，直接调用构建产物：
+> **通过 npm 安装（非 clone）？** 这个包带了多个 `bin`——MCP server
+> （`binance-smart-money-oi-monitor` / `-mcp`）**以及** tracker
+> （`binance-smart-money-oi-monitor-track`）。`npm run track` 只在 clone 里存在，
+> 所以从已安装的包里直接用 `npx` 跑 tracker bin：
 >
 > ```bash
 > SMART_MONEY_WATCHLIST=BEAT,BILL \
 > SMART_MONEY_DB_PATH=/abs/path/snapshots.db \
 > SMART_MONEY_INTERVAL_MIN=15 \
-> node node_modules/binance-smart-money-oi-monitor/dist/scripts/smart-money-tick.js
+> npx binance-smart-money-oi-monitor-track
 > ```
 >
 > 在它对着 MCP server 用的**同一个** `SMART_MONEY_DB_PATH` 跑起来之前，

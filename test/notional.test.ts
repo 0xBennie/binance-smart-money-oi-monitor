@@ -28,6 +28,23 @@ test('smartMoneyShareOfOI = gross notional / (2×OI), clamped, with null guards'
   assert.equal(smartMoneyShareOfOI(zero, 1000), null);       // notional 0 -> null
 });
 
+test('C1: dashboard SM Share uses the helper — always ≤ 1, no ~2× double-count', () => {
+  // Regression for the dashboard's old inline `smNotional / oi_now_usd` (no /2, no
+  // clamp) which read ~2× every other surface and could exceed 100%. The dashboard
+  // now calls smartMoneyShareOfOI, so it inherits the /2 + clamp.
+  const row = {   // both sides sized so gross notional ≈ 3× a small OI
+    longTradersQty: 1_000_000, longTradersAvgEntryPrice: 2,
+    shortTradersQty: 1_000_000, shortTradersAvgEntryPrice: 2,
+  };
+  const oiNowUsd = 1_000_000;                       // gross = 4,000,000
+  const share = smartMoneyShareOfOI(row, oiNowUsd);
+  assert.ok(share != null && share <= 1, `SM Share must be ≤ 1, got ${share}`);
+  assert.equal(share, 1);                           // 4e6 / (2×1e6) = 2 → clamped to 1
+  // A moderate case lands strictly below 1 (and is HALF the old un-halved value).
+  const moderate = smartMoneyShareOfOI(row, 8_000_000);   // 4e6 / (2×8e6) = 0.25
+  assert.equal(moderate, 0.25);                            // old inline gave 0.5
+});
+
 test('smartMoneySide breaks out smart-money (traders) + whale positions per side', () => {
   const sm: any = {
     longTraders: 100, longTradersQty: 10, longTradersAvgEntryPrice: 50,

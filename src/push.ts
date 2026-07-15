@@ -23,10 +23,10 @@ export async function buildPush(symbol: string): Promise<string | null> {
     symbol: sym,
     sm,
     oi,
-    price: funding?.markPrice,
+    price: funding?.markPrice ?? undefined,
     change24hPct: ticker?.priceChangePct24h,
     vol24hUsd: ticker?.quoteVolume24hUsd,
-    fundingRate: funding?.lastFundingRate,
+    fundingRate: funding?.lastFundingRate ?? undefined,
     fundingCountdown: funding ? fundingCountdownString(funding.nextFundingTime) : undefined,
   });
 }

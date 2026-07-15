@@ -6,7 +6,7 @@
 // Self-contained dark HTML + inline SVG (no chart library, no external assets).
 import { storage, type SmartMoneyHistoryRow } from './storage.js';
 import { normalizeSymbol } from './symbol.js';
-import { fmtPrice } from './format-num.js';
+import { fmtPrice, fmtQty } from './format-num.js';
 import { binanceHttp } from './binance-rate-limit.js';
 
 export interface ChartData {
@@ -31,9 +31,12 @@ async function backfillPrices(symbol: string, rows: SmartMoneyHistoryRow[]): Pro
     });
     const kl = ((resp.data as any[][]) || []).map((k) => ({ t: k[0] as number, close: parseFloat(k[4]) }));
     if (!kl.length) return;
+    // Both `missing` (subset of rows, ts ASC) and `kl` (klines, ts ASC) are sorted,
+    // so advance a single kline pointer instead of rescanning kl from 0 per row.
+    let ki = 0;
     for (const r of missing) {
-      let best = kl[0]!;                      // nearest kline bucket at or before r.ts
-      for (const k of kl) { if (k.t <= r.ts) best = k; else break; }
+      while (ki + 1 < kl.length && kl[ki + 1]!.t <= r.ts) ki++;   // last bucket at/before r.ts
+      const best = kl[ki]!;
       if (best && Number.isFinite(best.close)) r.price = best.close;
     }
   } catch { /* leave price null */ }
@@ -50,37 +53,10 @@ const W = 780, PLOT_H = 150, GAP = 46, PAD_L = 8, PAD_R = 8;
 const PLOT_W = W - PAD_L - PAD_R;
 const GREEN = '#2ebd85', RED = '#f6465d', AMBER = '#f0b90b';
 
-function fmtQty(v: number): string {
-  const a = Math.abs(v);
-  if (a >= 1e9) return (v / 1e9).toFixed(1) + 'B';
-  if (a >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-  if (a >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-  return String(Math.round(v));
-}
-
 interface Series { label: string; color: string; getVal: (r: SmartMoneyHistoryRow) => number | null; }
 
 function valid(v: number | null, dropNonPositive: boolean): v is number {
   return v != null && Number.isFinite(v) && (!dropNonPositive || v > 0);
-}
-
-/** Build an SVG polyline `points` string for one series, skipping invalid vertices
- * (non-finite, or ≤0 when dropNonPositive — e.g. a 0 whale-avg = "no position", which
- * must NOT anchor the price axis at $0). */
-function seriesPoints(
-  rows: SmartMoneyHistoryRow[], getVal: Series['getVal'],
-  t0: number, t1: number, lo: number, hi: number, topY: number, dropNonPositive: boolean,
-): string {
-  const tSpan = t1 - t0 || 1, vSpan = hi - lo || 1;
-  return rows
-    .map((r) => ({ r, v: getVal(r) }))
-    .filter(({ v }) => valid(v, dropNonPositive))
-    .map(({ r, v }) => {
-      const x = PAD_L + ((r.ts - t0) / tSpan) * PLOT_W;
-      const y = topY + PLOT_H - ((v! - lo) / vSpan) * PLOT_H;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
 }
 
 function linePanel(
@@ -88,20 +64,31 @@ function linePanel(
   series: Series[], fmt: (v: number) => string, dropNonPositive = false,
 ): string {
   const t0 = rows[0]!.ts, t1 = rows[rows.length - 1]!.ts;
-  const rangeVals = series
-    .flatMap((s) => rows.map(s.getVal))
-    .filter((v): v is number => valid(v, dropNonPositive));
+  // Materialize each series' valid (ts, v) points ONCE — getVal was previously
+  // evaluated 3× per row (range scan + polyline vertices + last-label). Invalid
+  // vertices (non-finite, or ≤0 when dropNonPositive — a 0 whale-avg = "no position"
+  // that must NOT anchor the price axis at $0) are dropped here.
+  const materialized = series.map((s) => {
+    const pts: { ts: number; v: number }[] = [];
+    for (const r of rows) { const v = s.getVal(r); if (valid(v, dropNonPositive)) pts.push({ ts: r.ts, v }); }
+    return { s, pts };
+  });
+  const rangeVals = materialized.flatMap(({ pts }) => pts.map((p) => p.v));
   const vmin = rangeVals.length ? Math.min(...rangeVals) : 0;
   const vmax = rangeVals.length ? Math.max(...rangeVals) : 1;
   const pad = (vmax - vmin) * 0.08 || vmax * 0.08 || 1;
   const lo = Math.max(0, vmin - pad), hi = vmax + pad;
-  const lines = series.map((s) => {
-    const pts = seriesPoints(rows, s.getVal, t0, t1, lo, hi, topY, dropNonPositive);
-    return pts ? `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.75"/>` : '';
+  const tSpan = t1 - t0 || 1, vSpan = hi - lo || 1;
+  const lines = materialized.map(({ s, pts }) => {
+    const str = pts.map(({ ts, v }) => {
+      const x = PAD_L + ((ts - t0) / tSpan) * PLOT_W;
+      const y = topY + PLOT_H - ((v - lo) / vSpan) * PLOT_H;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return str ? `<polyline points="${str}" fill="none" stroke="${s.color}" stroke-width="1.75"/>` : '';
   }).join('');
-  const labels = series.map((s, i) => {
-    let last: number | null = null;
-    for (const r of rows) { const v = s.getVal(r); if (valid(v, dropNonPositive)) last = v; }
+  const labels = materialized.map(({ s, pts }, i) => {
+    const last = pts.length ? pts[pts.length - 1]!.v : null;
     return `<text x="${PAD_L + 4}" y="${topY + 14 + i * 14}" fill="${s.color}" font-size="11">${s.label} ${last != null ? fmt(last) : '—'}</text>`;
   }).join('');
   return `

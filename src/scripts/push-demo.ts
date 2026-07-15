@@ -33,10 +33,10 @@ async function main(): Promise<void> {
   const rendered = formatSmartMoneyPush({
     symbol: SYMBOL,
     sm, oi,
-    price: funding?.markPrice,
+    price: funding?.markPrice ?? undefined,
     change24hPct: ticker?.priceChangePct24h,
     vol24hUsd: ticker?.quoteVolume24hUsd,
-    fundingRate: funding?.lastFundingRate,
+    fundingRate: funding?.lastFundingRate ?? undefined,
     fundingCountdown: funding ? fundingCountdownString(funding.nextFundingTime) : undefined,
   });
 
@@ -47,10 +47,10 @@ async function main(): Promise<void> {
   console.log(formatSmartMoneyPushPlain({
     symbol: SYMBOL,
     sm, oi,
-    price: funding?.markPrice,
+    price: funding?.markPrice ?? undefined,
     change24hPct: ticker?.priceChangePct24h,
     vol24hUsd: ticker?.quoteVolume24hUsd,
-    fundingRate: funding?.lastFundingRate,
+    fundingRate: funding?.lastFundingRate ?? undefined,
     fundingCountdown: funding ? fundingCountdownString(funding.nextFundingTime) : undefined,
   }));
 

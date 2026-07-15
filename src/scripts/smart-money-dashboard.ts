@@ -13,8 +13,8 @@
  */
 import 'dotenv/config';
 import { storage } from '../storage.js';
-import { smartMoneyNotionalUsd } from '../binance-smart-money.js';
-import { fmtChg } from '../format-num.js';
+import { smartMoneyNotionalUsd, smartMoneyShareOfOI } from '../binance-smart-money.js';
+import { fmtUsd, fmtPct, fmtChg } from '../format-num.js';
 
 // express is an optional dependency (only the dashboard needs it). Load it
 // dynamically so a missing/failed install gives a clear message, not a crash.
@@ -46,6 +46,23 @@ function isMissingDbError(e: any): boolean {
   const code = e?.code;
   if (code === 'SQLITE_CANTOPEN' || code === 'ENOENT') return true;
   return /unable to open database file|no such file/i.test(String(e?.message || ''));
+}
+
+/** Friendly "run the tracker first" HTML for the no-DB-yet case (paired with the
+ * JSON 503 the /api routes return), so a fresh install shows guidance not a raw 500. */
+function missingDbHtml(): string {
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>Smart Money Dashboard — no data yet</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font:14px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#0a0a0a;color:#e4e4e7;margin:0;padding:32px;max-width:640px}
+h1{font-size:18px}code{background:#18181b;padding:2px 6px;border-radius:4px;color:#fafafa}a{color:#60a5fa}</style></head>
+<body>
+  <h1>还没有本地数据</h1>
+  <p>快照数据库还不存在——先把 tracker 跑起来采集一段时间,看板才有数据可显示。</p>
+  <p>例如:<br><code>SMART_MONEY_WATCHLIST=BEAT,BILL SMART_MONEY_DB_PATH=/abs/path/snapshots.db npx binance-smart-money-oi-monitor-track</code></p>
+  <p>确认 <code>SMART_MONEY_DB_PATH</code> 与看板指向<b>同一个库</b>。详见
+  <a href="https://github.com/0xBennie/binance-smart-money-oi-monitor#readme">README</a>。</p>
+</body></html>`;
 }
 
 interface SnapRow {
@@ -113,15 +130,17 @@ function getLatestSnapshots(): EnrichedRow[] {
         : 0;
       // Derive SM USD notional from quantity × avg-entry (units are known),
       // not from `totalPositions` (binance returns inconsistent units).
-      const smNotionalUsd = smartMoneyNotionalUsd({
+      const smFields = {
         longTradersQty: r.long_traders_qty,
         longTradersAvgEntryPrice: r.long_traders_avg_entry_price,
         shortTradersQty: r.short_traders_qty,
         shortTradersAvgEntryPrice: r.short_traders_avg_entry_price,
-      });
-      const smRatio = r.oi_now_usd && r.oi_now_usd > 0 && smNotionalUsd > 0
-        ? smNotionalUsd / r.oi_now_usd
-        : null;
+      };
+      const smNotionalUsd = smartMoneyNotionalUsd(smFields);
+      // Use the canonical library helper: gross-both-sides ÷ (2 × single-sided OI),
+      // clamped to [0,1]. The old inline `smNotionalUsd / oi_now_usd` omitted the /2,
+      // so it double-counted (~2× every other surface) and could exceed 100%.
+      const smRatio = smartMoneyShareOfOI(smFields, r.oi_now_usd);
       return {
         ...r,
         longProfitPct: lp,
@@ -153,16 +172,11 @@ function getSymbolHistory(symbol: string, days = 30): SnapRow[] {
   }
 }
 
-const fmtPct = (v: number, digits = 0) => (v * 100).toFixed(digits) + '%';
+// fmtPct (0..1 → %) and fmtUsd come from the shared format-num module (single
+// source of truth for the ×100 convention + USD scaling). fmtNum/fmtTs/chgClass
+// stay local — they're dashboard-specific (avg-entry precision, ISO ts, CSS class).
 const fmtNum = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 4 });
 const fmtTs  = (ts: number) => new Date(ts).toISOString().slice(0, 19).replace('T', ' ');
-const fmtOiUsd = (v: number | null): string => {
-  if (v == null) return '—';
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
-  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
-  return `$${v.toFixed(0)}`;
-};
 const chgClass = (v: number | null): string => {
   if (v == null) return '';
   if (v > 1) return 'class="g"';
@@ -198,14 +212,14 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
         <td><a href="/symbol/${encodeURIComponent(r.symbol)}">${htmlEscape(r.symbol)}</a></td>
         <td>${r.long_traders + r.short_traders} (W ${r.long_whales + r.short_whales})</td>
         <td>${r.long_short_ratio.toFixed(2)}</td>
-        <td class="g">${fmtPct(r.longProfitPct)}</td>
-        <td class="r">${fmtPct(r.shortProfitPct)}</td>
-        <td class="g">${fmtPct(r.longWhaleProfitPct)}</td>
-        <td class="r">${fmtPct(r.shortWhaleProfitPct)}</td>
+        <td class="g">${fmtPct(r.longProfitPct, 0)}</td>
+        <td class="r">${fmtPct(r.shortProfitPct, 0)}</td>
+        <td class="g">${fmtPct(r.longWhaleProfitPct, 0)}</td>
+        <td class="r">${fmtPct(r.shortWhaleProfitPct, 0)}</td>
         <td>${fmtNum(r.long_whales_avg_entry_price)}</td>
         <td>${fmtNum(r.short_whales_avg_entry_price)}</td>
         <td style="${spreadStyle}">${fmtPct(r.whalePriceSpread, 1)}</td>
-        <td>${fmtOiUsd(r.oi_now_usd)}</td>
+        <td>${fmtUsd(r.oi_now_usd)}</td>
         <td ${chgClass(r.oi_chg_1h)}>${fmtChg(r.oi_chg_1h)}</td>
         <td ${chgClass(r.oi_chg_4h)}>${fmtChg(r.oi_chg_4h)}</td>
         <td>${r.smRatio == null ? '—' : fmtPct(r.smRatio, 1)}</td>
@@ -316,8 +330,8 @@ ${rows.slice().reverse().map(r => `      <tr>
         <td>${r.long_short_ratio.toFixed(2)}</td>
         <td>${r.long_traders}/${r.short_traders}</td>
         <td>${r.long_whales}/${r.short_whales}</td>
-        <td style="color:#86efac">${fmtPct(r.long_profit_traders / Math.max(r.long_traders, 1))}</td>
-        <td style="color:#fca5a5">${fmtPct(r.short_profit_traders / Math.max(r.short_traders, 1))}</td>
+        <td style="color:#86efac">${fmtPct(r.long_profit_traders / Math.max(r.long_traders, 1), 0)}</td>
+        <td style="color:#fca5a5">${fmtPct(r.short_profit_traders / Math.max(r.short_traders, 1), 0)}</td>
         <td>${fmtNum(r.long_whales_avg_entry_price)}</td>
         <td>${fmtNum(r.short_whales_avg_entry_price)}</td>
       </tr>`).join('\n')}
@@ -328,15 +342,21 @@ ${rows.slice().reverse().map(r => `      <tr>
 
 const app = express();
 
-// CORS — README advertises /api/* as a JSON API; allow cross-origin GETs so
-// frontends on other domains can consume it. Read-only, no credentials,
-// so wildcard origin is safe.
-app.use((_req, res, next) => {
-  res.set('access-control-allow-origin', '*');
-  res.set('access-control-allow-methods', 'GET, OPTIONS');
-  res.set('access-control-allow-headers', 'content-type');
-  next();
-});
+// CORS — OFF by default. A wildcard `*` on a loopback server lets ANY website the
+// user visits read the snapshot DB / watchlist cross-origin (the browser sends the
+// request from the user's machine, which can reach 127.0.0.1). Opt in by setting
+// SMART_MONEY_DASHBOARD_CORS=<origin> to allow exactly that one origin (reflected,
+// with `Vary: Origin`). No CORS header at all for the 127.0.0.1 default.
+const CORS_ORIGIN = process.env.SMART_MONEY_DASHBOARD_CORS;
+if (CORS_ORIGIN) {
+  app.use((_req, res, next) => {
+    res.set('access-control-allow-origin', CORS_ORIGIN);
+    res.set('vary', 'Origin');
+    res.set('access-control-allow-methods', 'GET, OPTIONS');
+    res.set('access-control-allow-headers', 'content-type');
+    next();
+  });
+}
 
 app.get('/', (req, res) => {
   const sort = String(req.query.sort || 'profitDiff');
@@ -344,6 +364,10 @@ app.get('/', (req, res) => {
     const rows = getLatestSnapshots();
     res.set('content-type', 'text/html; charset=utf-8').send(renderHtml(rows, sort));
   } catch (e: any) {
+    if (isMissingDbError(e)) {
+      res.status(503).set('content-type', 'text/html; charset=utf-8').send(missingDbHtml());
+      return;
+    }
     res.status(500).send(`<pre>${htmlEscape(e?.message || 'internal error')}</pre>`);
   }
 });
@@ -358,6 +382,10 @@ app.get('/symbol/:symbol', (req, res) => {
     }
     res.set('content-type', 'text/html; charset=utf-8').send(renderSymbolHistoryHtml(sym, rows));
   } catch (e: any) {
+    if (isMissingDbError(e)) {
+      res.status(503).set('content-type', 'text/html; charset=utf-8').send(missingDbHtml());
+      return;
+    }
     res.status(500).send(`<pre>${htmlEscape(e?.message || 'internal error')}</pre>`);
   }
 });

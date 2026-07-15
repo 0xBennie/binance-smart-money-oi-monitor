@@ -16,38 +16,15 @@
  * "Smart Money's share of total market OI" — see dashboard for the join.
  */
 import 'dotenv/config';
-import axios from 'axios';
 import { storage } from '../storage.js';
 import { getOpenInterestBatch } from '../binance-open-interest.js';
-import { preflightBinanceFapi } from '../binance-rate-limit.js';
+import { preflightBinanceFapi, binanceHttp } from '../binance-rate-limit.js';
+import { getUsdtPerpetuals } from '../symbol-list.js';
 import { installGracefulShutdown } from '../cron-utils.js';
 
 const POOL_MAX    = parseInt(process.env.OI_POOL_MAX    || '0', 10);
 const SHARD_INDEX = parseInt(process.env.OI_SHARD_INDEX || '0', 10);
 const SHARD_TOTAL = Math.max(1, parseInt(process.env.OI_SHARD_TOTAL || '1', 10));
-
-async function getAllUsdtPerpetuals(): Promise<string[]> {
-  try {
-    const exInfo = await axios.get(
-      'https://fapi.binance.com/fapi/v1/exchangeInfo',
-      { timeout: 10_000 }
-    );
-    let list: string[] = (exInfo.data.symbols || [])
-      .filter((s: any) =>
-        s.status === 'TRADING' &&
-        s.contractType === 'PERPETUAL' &&
-        s.quoteAsset === 'USDT'
-      )
-      .map((s: any) => s.symbol as string)
-      .sort();
-    if (POOL_MAX > 0) list = list.slice(0, POOL_MAX);
-    if (SHARD_TOTAL > 1) list = list.filter((_, i) => i % SHARD_TOTAL === SHARD_INDEX);
-    return list;
-  } catch (e: any) {
-    console.warn(`[oi-tick] exchangeInfo failed (${e?.response?.status || e.message})`);
-    return [];
-  }
-}
 
 async function main(): Promise<void> {
   installGracefulShutdown('oi-tick');
@@ -62,7 +39,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const pool = await getAllUsdtPerpetuals();
+  const pool = await getUsdtPerpetuals(binanceHttp, { poolMax: POOL_MAX, shardIndex: SHARD_INDEX, shardTotal: SHARD_TOTAL });
   if (pool.length === 0) {
     console.log('[oi-tick] no symbols, skip');
     storage.stop();

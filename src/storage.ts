@@ -83,10 +83,33 @@ export function dbErrorHint(e: any): string {
     return `本地 DB 读取失败:better-sqlite3 原生模块与当前 Node 版本不匹配(升级 Node 后常见)。修复:npm rebuild better-sqlite3(或 npm i better-sqlite3)。\n原始错误:${msg}`;
   if (/Cannot find module 'better-sqlite3'|ERR_MODULE_NOT_FOUND|Could not locate the bindings/i.test(msg))
     return `本地 DB 读取失败:缺少 better-sqlite3(时序工具 change/scan/chart 需要它)。安装:npm i better-sqlite3。\n原始错误:${msg}`;
+  if (/no such column/i.test(msg))
+    return `本地 DB 读取失败:数据库缺少某一列(通常是旧版本建的库、还没被新版本写过一次触发迁移)。修复:先跑一次 tracker(smart-money-tick)让它执行 schema 迁移,或删除旧库重建。\n原始错误:${msg}`;
   return `本地 DB 读取失败:${msg}`;
 }
-const SM_SELECT_COLS =
-  `ts, long_short_ratio AS longShortRatio,
+
+/** Thrown by getDbReadonly when the DB file doesn't exist yet. `code = 'ENOENT'`
+ * so callers' generic missing-DB detectors (dashboard's isMissingDbError) match it. */
+export class MissingDbError extends Error {
+  readonly code = 'ENOENT';
+  constructor(dbPath: string) {
+    super(`no local DB at ${dbPath} — run the tracker (smart-money-tick) first`);
+    this.name = 'MissingDbError';
+  }
+}
+
+/** Does a table have a given column? (PRAGMA probe — cheap.) Used so a read on a
+ * pre-1.9.4 DB that predates the `price` column doesn't throw "no such column". */
+function tableHasColumn(db: Database.Database, table: string, col: string): boolean {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return cols.some((c) => c.name === col);
+}
+
+/** Smart-money read column list. `price` may be absent on a pre-1.9.4 DB whose
+ * migration hasn't run (reads open their own connection and never call migrate()),
+ * so select `NULL AS price` in that case. */
+function smSelectCols(hasPrice: boolean): string {
+  return `ts, long_short_ratio AS longShortRatio,
    long_traders AS longTraders, long_traders_qty AS longQty, long_traders_avg_entry_price AS longAvg,
    short_traders AS shortTraders, short_traders_qty AS shortQty, short_traders_avg_entry_price AS shortAvg,
    long_profit_traders AS longProfitTraders, short_profit_traders AS shortProfitTraders,
@@ -94,13 +117,19 @@ const SM_SELECT_COLS =
    long_whales AS longWhales, short_whales AS shortWhales,
    long_whales_qty AS longWhalesQty, short_whales_qty AS shortWhalesQty,
    long_whales_avg_entry_price AS longWhaleAvg, short_whales_avg_entry_price AS shortWhaleAvg,
-   price AS price`;
+   ${hasPrice ? 'price' : 'NULL'} AS price`;
+}
 
 class Storage {
   private db: Database.Database | null = null;
   private stmtInsertSmartMoney!: Database.Statement;
   private stmtInsertTopTrader!: Database.Statement;
   private stmtInsertOI!: Database.Statement;
+  // Cached read statements against the live `db` (D2): the alert hot path calls
+  // smartMoneyHistory every sweep — re-preparing (and reopening a whole readonly
+  // connection) per call is wasteful when a live connection is already open.
+  private stmtHistory?: Database.Statement;
+  private stmtLatest?: Database.Statement;
 
   init(dbPath?: string): void {
     if (this.db) return;
@@ -236,21 +265,37 @@ class Storage {
     this.db?.pragma('wal_checkpoint(TRUNCATE)');
   }
 
-  /** Read-only handle for dashboards / queries. */
+  /** Read-only handle for dashboards / queries. Throws MissingDbError (code ENOENT)
+   * when the DB file doesn't exist yet — consistent with the array-returning read
+   * methods below, and recognized by the dashboard's isMissingDbError. */
   getDbReadonly(dbPath?: string): Database.Database {
+    const p = dbPath ?? resolveDbPath();
+    if (!fs.existsSync(p)) throw new MissingDbError(p);
     const Database = loadDatabase();
-    return new Database(dbPath ?? resolveDbPath(), { readonly: true });
+    return new Database(p, { readonly: true });
   }
 
   /** Smart-money snapshots for one symbol since `sinceMs`, oldest first. */
   smartMoneyHistory(symbol: string, sinceMs: number, dbPath?: string): SmartMoneyHistoryRow[] {
+    // Reuse the live connection (+ cached statement) when one is open and no explicit
+    // path override was given — migrate() has already run so `price` is guaranteed.
+    if (this.db && dbPath === undefined) {
+      if (!this.stmtHistory) {
+        this.stmtHistory = this.db.prepare(
+          `SELECT ${smSelectCols(true)} FROM ob_smart_money_snapshots
+           WHERE symbol = ? AND ts >= ? ORDER BY ts ASC`
+        );
+      }
+      return this.stmtHistory.all(symbol, sinceMs) as SmartMoneyHistoryRow[];
+    }
     const p = dbPath ?? resolveDbPath();
     if (!fs.existsSync(p)) return [];   // no local DB yet (e.g. ephemeral npx run)
     const Database = loadDatabase();
     const db = new Database(p, { readonly: true });
     try {
+      const hasPrice = tableHasColumn(db, 'ob_smart_money_snapshots', 'price');
       return db.prepare(
-        `SELECT ${SM_SELECT_COLS} FROM ob_smart_money_snapshots
+        `SELECT ${smSelectCols(hasPrice)} FROM ob_smart_money_snapshots
          WHERE symbol = ? AND ts >= ? ORDER BY ts ASC`
       ).all(symbol, sinceMs) as SmartMoneyHistoryRow[];
     } finally { db.close(); }
@@ -258,21 +303,25 @@ class Storage {
 
   /** Latest snapshot per symbol — for market-wide ranking / scans. */
   latestSmartMoney(dbPath?: string): SmartMoneyHistoryRow[] {
+    if (this.db && dbPath === undefined) {
+      if (!this.stmtLatest) {
+        this.stmtLatest = this.db.prepare(
+          `SELECT s.symbol AS symbol, ${smSelectCols(true)}
+           FROM ob_smart_money_snapshots s
+           JOIN (SELECT symbol, MAX(ts) AS mts FROM ob_smart_money_snapshots GROUP BY symbol) m
+             ON s.symbol = m.symbol AND s.ts = m.mts`
+        );
+      }
+      return this.stmtLatest.all() as SmartMoneyHistoryRow[];
+    }
     const p = dbPath ?? resolveDbPath();
     if (!fs.existsSync(p)) return [];   // no local DB yet
     const Database = loadDatabase();
     const db = new Database(p, { readonly: true });
     try {
+      const hasPrice = tableHasColumn(db, 'ob_smart_money_snapshots', 'price');
       return db.prepare(
-        `SELECT s.symbol AS symbol, s.ts AS ts, s.long_short_ratio AS longShortRatio,
-                s.long_traders AS longTraders, s.long_traders_qty AS longQty, s.long_traders_avg_entry_price AS longAvg,
-                s.short_traders AS shortTraders, s.short_traders_qty AS shortQty, s.short_traders_avg_entry_price AS shortAvg,
-                s.long_profit_traders AS longProfitTraders, s.short_profit_traders AS shortProfitTraders,
-                s.long_profit_whales AS longProfitWhales, s.short_profit_whales AS shortProfitWhales,
-                s.long_whales AS longWhales, s.short_whales AS shortWhales,
-                s.long_whales_qty AS longWhalesQty, s.short_whales_qty AS shortWhalesQty,
-                s.long_whales_avg_entry_price AS longWhaleAvg, s.short_whales_avg_entry_price AS shortWhaleAvg,
-                s.price AS price
+        `SELECT s.symbol AS symbol, ${smSelectCols(hasPrice)}
          FROM ob_smart_money_snapshots s
          JOIN (SELECT symbol, MAX(ts) AS mts FROM ob_smart_money_snapshots GROUP BY symbol) m
            ON s.symbol = m.symbol AND s.ts = m.mts`
@@ -284,6 +333,10 @@ class Storage {
     if (this.db) {
       this.db.close();
       this.db = null;
+      // Cached statements belong to the now-closed connection — drop them so a
+      // later init() re-prepares against the fresh handle.
+      this.stmtHistory = undefined;
+      this.stmtLatest = undefined;
       console.log('[Storage] stopped');
     }
   }

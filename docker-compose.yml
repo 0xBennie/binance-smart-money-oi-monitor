@@ -1,6 +1,8 @@
 # One-command deploy for the whole stack:
 #   - altmonitor  : full-market price / OI / volume anomaly alerts → Telegram
 #   - tracker     : snapshots the smart-money watchlist into a shared SQLite DB
+#   - oi-tick     : snapshots Open Interest (populates the dashboard OI / OIΔ / SM-Share columns)
+#   - toptrader   : snapshots top-trader LSR + Taker buy/sell (optional)
 #   - dashboard   : Express dashboard + JSON API over that DB (http://host:3001)
 #
 #   cp altmonitor/.env.example altmonitor/.env    # fill TG_BOT_TOKEN + TG_CHAT_ID (altmonitor only)
@@ -28,6 +30,31 @@ services:
       # long interval — a full sweep is ~100 min, so keep INTERVAL_MIN high there).
       SMART_MONEY_WATCHLIST: ${SMART_MONEY_WATCHLIST:-}
       SMART_MONEY_INTERVAL_MIN: ${SMART_MONEY_INTERVAL_MIN:-120}
+    volumes:
+      - smartmoney-data:/data
+    restart: unless-stopped
+
+  # OI snapshots — WITHOUT this service the dashboard's OI / OIΔ / SM-Share columns
+  # stay permanently empty (they LEFT-join ob_oi_snapshots, which only oi-tick writes).
+  # oi-tick.ts runs once and exits, so loop it every 30 min (its documented cadence).
+  oi-tick:
+    build: .
+    command: ["sh", "-c", "while true; do npx tsx src/scripts/oi-tick.ts; sleep 1800; done"]
+    environment:
+      SMART_MONEY_DB_PATH: /data/snapshots.db
+      OI_POOL_MAX: ${OI_POOL_MAX:-0}
+    volumes:
+      - smartmoney-data:/data
+    restart: unless-stopped
+
+  # Optional: top-trader LSR + Taker buy/sell snapshots (dashboard doesn't require it,
+  # but the get_top_trader history / panel extras use it). Same 30-min loop pattern.
+  toptrader:
+    build: .
+    command: ["sh", "-c", "while true; do npx tsx src/scripts/top-trader-tick.ts; sleep 1800; done"]
+    environment:
+      SMART_MONEY_DB_PATH: /data/snapshots.db
+      TOP_TRADER_POOL_MAX: ${TOP_TRADER_POOL_MAX:-0}
     volumes:
       - smartmoney-data:/data
     restart: unless-stopped

@@ -33,10 +33,12 @@ export interface TickerInfo {
 
 export interface FundingInfo {
   symbol: string;
-  markPrice: number;
-  indexPrice: number;
-  lastFundingRate: number;     // decimal, e.g. 0.0001 = 0.01%
-  nextFundingTime: number;     // ms
+  // Non-finite values (missing/malformed field) are coerced to null so downstream
+  // `!= null` checks degrade to "—" instead of rendering "NaN"/"NaN%".
+  markPrice: number | null;
+  indexPrice: number | null;
+  lastFundingRate: number | null;   // decimal, e.g. 0.0001 = 0.01%
+  nextFundingTime: number;          // ms
 }
 
 interface CachedTicker { snap: TickerInfo; fetchedAt: number; }
@@ -134,11 +136,17 @@ export async function getFundingInfo(symbol: string): Promise<FundingInfo | null
     updateBinanceUsedWeight(resp.headers['x-mbx-used-weight-1m'] as string | undefined);
     const d = resp.data;
     if (!d?.symbol) return cached?.snap ?? null;
+    // Coerce a non-finite parse (missing/malformed field) to null, so a NaN can't
+    // propagate into "FR NaN%" in the push header or a NaN price in a tool result.
+    const finiteOrNull = (v: unknown): number | null => {
+      const n = parseFloat(v as string);
+      return Number.isFinite(n) ? n : null;
+    };
     const snap: FundingInfo = {
       symbol: d.symbol,
-      markPrice: parseFloat(d.markPrice),
-      indexPrice: parseFloat(d.indexPrice),
-      lastFundingRate: parseFloat(d.lastFundingRate),
+      markPrice: finiteOrNull(d.markPrice),
+      indexPrice: finiteOrNull(d.indexPrice),
+      lastFundingRate: finiteOrNull(d.lastFundingRate),
       nextFundingTime: Number(d.nextFundingTime),
     };
     capSet(fundingCache, symbol, { snap, fetchedAt: Date.now() });
