@@ -6,10 +6,10 @@
 import { getSmartMoneyOverview } from './binance-smart-money.js';
 import { getOpenInterest } from './binance-open-interest.js';
 import { getTicker24h, getFundingInfo, fundingCountdownString } from './binance-ticker.js';
-import { formatSmartMoneyPush } from './format.js';
+import { formatSmartMoneyPush, type CardLang } from './format.js';
 import { normalizeSymbol } from './symbol.js';
 
-export async function buildPush(symbol: string): Promise<string | null> {
+export async function buildPush(symbol: string, lang?: CardLang): Promise<string | null> {
   const sym = normalizeSymbol(symbol);
   if (!sym) return null;
   const [sm, oi, ticker, funding] = await Promise.all([
@@ -28,5 +28,5 @@ export async function buildPush(symbol: string): Promise<string | null> {
     vol24hUsd: ticker?.quoteVolume24hUsd,
     fundingRate: funding?.lastFundingRate ?? undefined,
     fundingCountdown: funding ? fundingCountdownString(funding.nextFundingTime) : undefined,
-  });
+  }, lang);
 }

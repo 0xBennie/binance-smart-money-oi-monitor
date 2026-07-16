@@ -42,11 +42,38 @@ function bar(frac: number, width = 10): string {
   return '▰'.repeat(filled) + '▱'.repeat(width - filled);
 }
 
+export type CardLang = 'zh' | 'en';
+
+export function resolveCardLang(lang?: CardLang): CardLang {
+  if (lang === 'zh' || lang === 'en') return lang;
+  return process.env.SMART_MONEY_CARD_LANG === 'en' ? 'en' : 'zh';
+}
+
+const CARD_LABELS = {
+  zh: {
+    perp: '永续', overview: '巨鲸总览', totalPosition: '总持仓', whales: '鲸鱼',
+    ratio: '名义多空比', long: '多头', short: '空头', whaleUnit: '个鲸鱼',
+    inProfit: '📈 盈利中', inLoss: '📉 亏损中', position: '仓位', avgEntry: '均价',
+    unrealizedPnl: '未实现盈亏', profitPct: '盈利比例', dataTime: '数据时间',
+    volume24h: '24h Vol', openInterest: 'OI', fundingRate: 'FR',
+    footer: '🐦 x.com/0xBenniee · 仅数据分析,非投资建议 / not financial advice',
+  },
+  en: {
+    perp: 'Perp', overview: 'Whale Overview', totalPosition: 'Total Position', whales: 'whales',
+    ratio: 'Notional L/S Ratio', long: 'Long', short: 'Short', whaleUnit: 'whales',
+    inProfit: '📈 in profit', inLoss: '📉 in loss', position: 'Position', avgEntry: 'Avg Entry',
+    unrealizedPnl: 'Unrealized PnL', profitPct: 'In-Profit %', dataTime: 'Data time',
+    volume24h: '24h Volume', openInterest: 'Open Interest', fundingRate: 'Funding Rate',
+    footer: '🐦 x.com/0xBenniee · Data and analysis only — not financial advice',
+  },
+} satisfies Record<CardLang, Record<string, string>>;
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
-export function formatSmartMoneyPush(input: FormatterInput): string {
+export function formatSmartMoneyPush(input: FormatterInput, lang?: CardLang): string {
   const { symbol, sm, oi } = input;
-  const contractType = input.contractType || '永续';
+  const L = CARD_LABELS[resolveCardLang(lang)];
+  const contractType = input.contractType || L.perp;
 
   // markPrice resolution order:
   //   1. explicit input.price (most accurate, from premiumIndex)
@@ -89,8 +116,8 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
   const shortProfitFrac = sm.shortWhales > 0 ? sm.shortProfitWhales / sm.shortWhales : 0;
 
   // Default status to "—" if PnL unknown (markPrice unavailable)
-  const longStatus = !haveMarkPrice ? '—' : (longPnl >= 0 ? '📈 盈利中' : '📉 亏损中');
-  const shortStatus = !haveMarkPrice ? '—' : (shortPnl >= 0 ? '📈 盈利中' : '📉 亏损中');
+  const longStatus = !haveMarkPrice ? '—' : (longPnl >= 0 ? L.inProfit : L.inLoss);
+  const shortStatus = !haveMarkPrice ? '—' : (shortPnl >= 0 ? L.inProfit : L.inLoss);
 
   const lines: string[] = [];
 
@@ -106,43 +133,40 @@ export function formatSmartMoneyPush(input: FormatterInput): string {
   const frStr = Number.isFinite(input.fundingRate)
     ? `${(input.fundingRate! * 100).toFixed(4)}%${input.fundingCountdown ? ' (' + input.fundingCountdown + ')' : ''}`
     : '—';
-  lines.push(`<code>24h Vol ${volStr}  •  OI ${oiStr}  •  FR ${frStr}</code>`);
+  lines.push(`<code>${L.volume24h} ${volStr}  •  ${L.openInterest} ${oiStr}  •  ${L.fundingRate} ${frStr}</code>`);
   lines.push('');
 
-  // 巨鲸总览
-  lines.push('🐋 <b>巨鲸总览</b>');
+  lines.push(`🐋 <b>${L.overview}</b>`);
   const ratioStr = notionalRatio == null ? '—' : notionalRatio.toFixed(2);
   lines.push(
-    `<code>总持仓 ${fmtUsd(totalWhalePosUsd)}  •  鲸鱼 ${whaleCount}  •  名义多空比 ${ratioStr}</code>`
+    `<code>${L.totalPosition} ${fmtUsd(totalWhalePosUsd)}  •  ${L.whales} ${whaleCount}  •  ${L.ratio} ${ratioStr}</code>`
   );
   lines.push('');
 
-  // 🟢 多头 card
-  lines.push(`🟢 <b>多头 ${sm.longWhales} 个鲸鱼</b>  [${longStatus}]`);
-  lines.push(`<code>仓位 ${fmtUsd(longUsd)}  •  均价 $${fmtPrice(sm.longWhalesAvgEntryPrice)}</code>`);
-  lines.push(`<code>未实现盈亏 ${fmtSignedUsd(longPnl)}</code>`);
-  lines.push(`<code>${bar(longProfitFrac)} 盈利比例 ${fmtPct(longProfitFrac)}</code>`);
+  lines.push(`🟢 <b>${L.long} ${sm.longWhales} ${L.whaleUnit}</b>  [${longStatus}]`);
+  lines.push(`<code>${L.position} ${fmtUsd(longUsd)}  •  ${L.avgEntry} $${fmtPrice(sm.longWhalesAvgEntryPrice)}</code>`);
+  lines.push(`<code>${L.unrealizedPnl} ${fmtSignedUsd(longPnl)}</code>`);
+  lines.push(`<code>${bar(longProfitFrac)} ${L.profitPct} ${fmtPct(longProfitFrac)}</code>`);
   lines.push('');
 
-  // 🔴 空头 card
-  lines.push(`🔴 <b>空头 ${sm.shortWhales} 个鲸鱼</b>  [${shortStatus}]`);
-  lines.push(`<code>仓位 ${fmtUsd(shortUsd)}  •  均价 $${fmtPrice(sm.shortWhalesAvgEntryPrice)}</code>`);
-  lines.push(`<code>未实现盈亏 ${fmtSignedUsd(shortPnl)}</code>`);
-  lines.push(`<code>${bar(shortProfitFrac)} 盈利比例 ${fmtPct(shortProfitFrac)}</code>`);
+  lines.push(`🔴 <b>${L.short} ${sm.shortWhales} ${L.whaleUnit}</b>  [${shortStatus}]`);
+  lines.push(`<code>${L.position} ${fmtUsd(shortUsd)}  •  ${L.avgEntry} $${fmtPrice(sm.shortWhalesAvgEntryPrice)}</code>`);
+  lines.push(`<code>${L.unrealizedPnl} ${fmtSignedUsd(shortPnl)}</code>`);
+  lines.push(`<code>${bar(shortProfitFrac)} ${L.profitPct} ${fmtPct(shortProfitFrac)}</code>`);
 
   if (sm.ts) {
     lines.push('');
-    lines.push(`<i>数据时间 ${new Date(sm.ts).toISOString().slice(0, 19).replace('T', ' ')} UTC</i>`);
+    lines.push(`<i>${L.dataTime} ${new Date(sm.ts).toISOString().slice(0, 19).replace('T', ' ')} UTC</i>`);
   }
   lines.push('');
-  lines.push('<i>🐦 x.com/0xBenniee · 仅数据分析,非投资建议 / not financial advice</i>');
+  lines.push(`<i>${L.footer}</i>`);
 
   return lines.join('\n');
 }
 
 /** Strip HTML tags for plain-text channels (logs, stdout, non-TG bots). */
-export function formatSmartMoneyPushPlain(input: FormatterInput): string {
-  return formatSmartMoneyPush(input)
+export function formatSmartMoneyPushPlain(input: FormatterInput, lang?: CardLang): string {
+  return formatSmartMoneyPush(input, lang)
     .replace(/<\/?[bi]>/g, '')
     .replace(/<\/?code>/g, '');
 }

@@ -9,11 +9,17 @@
 import 'dotenv/config';
 import { writeFileSync } from 'node:fs';
 import { buildPanel, renderPanelHtml } from '../panel.js';
+import { maybeHelp } from './cli-help.js';
 
 const args = process.argv.slice(2);
+maybeHelp(args, {
+  usage: 'npm run panel -- <SYMBOL> [--out file.html]',
+  description: 'Generate a shareable Smart Money panel (self-contained dark HTML) for a symbol from live data — open it in a browser and screenshot for a tweet.',
+  example: 'npm run panel -- BEAT --out beat.html',
+});
 const symbol = args.find((a) => !a.startsWith('-'));
 if (!symbol) {
-  console.error('usage: npm run panel <SYMBOL> [--out file.html]');
+  console.error('usage: npm run panel -- <SYMBOL> [--out file.html]');
   process.exit(1);
 }
 

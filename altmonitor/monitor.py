@@ -128,6 +128,7 @@ class Monitor:
         self._alerted_candle: dict[str, int] = {}
         self._last_fire: dict[tuple[str, str], float] = {}  # (symbol, kind) -> monotonic
         self._last_price: dict[str, float] = {}             # latest close per symbol
+        self._kline_tasks: set[asyncio.Task] = set()        # in-flight kline handlers
 
     async def _load_symbols(self) -> None:
         self._symbols = await fetch_usdt_perpetuals(self._rest._session)
@@ -203,6 +204,27 @@ class Monitor:
                 if p1 is not None and abs(p1) >= s.oi_surge_1m and self._should_fire(symbol, "oi"):
                     self._fire_oi(symbol, "1m", p1)
 
+    def _spawn_kline(self, msg: dict) -> None:
+        """Process a kline OFF the WS read path.
+
+        `_handle_kline` awaits `metrics.fetch_lsr` (an HTTP GET up to 10s plus the
+        shared REST back-off). Awaiting it inline would freeze `async for raw in ws`
+        for that whole time — with frames piling up in the receive buffer — so we
+        hand it to a background task and let the reader keep draining. We keep a
+        strong reference (else the loop may GC a running task) and drop it when done.
+        """
+        task = asyncio.create_task(self._handle_kline(msg))
+        self._kline_tasks.add(task)
+        task.add_done_callback(self._on_kline_done)
+
+    def _on_kline_done(self, task: asyncio.Task) -> None:
+        self._kline_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:  # a failed fetch must not vanish silently
+            log.warning("handle_kline error: %s", exc)
+
     async def _handle_kline(self, msg: dict) -> None:
         k = msg.get("k")
         symbol = msg.get("s")
@@ -269,7 +291,11 @@ class Monitor:
                     config.WS_BASE,
                     ping_interval=20,
                     ping_timeout=20,
-                    max_queue=None,
+                    # Bounded: an unbounded (None) queue lets frames pile up without
+                    # limit if consumption ever lags. With handling now offloaded the
+                    # reader drains fast, so this is just a safety ceiling (back
+                    # pressure via TCP flow control, not frame loss).
+                    max_queue=256,
                     ssl=config.ssl_context(),
                 ) as ws:
                     await self._subscribe(ws)
@@ -284,10 +310,9 @@ class Monitor:
                         except (ValueError, TypeError):
                             continue
                         if msg.get("e") == "kline":
-                            try:
-                                await self._handle_kline(msg)
-                            except Exception as e:  # noqa: BLE001
-                                log.warning("handle_kline error: %s", e)
+                            # Offloaded so a slow LSR fetch can't block this reader;
+                            # handler exceptions are surfaced in _on_kline_done.
+                            self._spawn_kline(msg)
             except Exception as e:  # noqa: BLE001
                 log.warning("WS dropped (%s), reconnect in %ds", e, backoff)
                 await asyncio.sleep(backoff)

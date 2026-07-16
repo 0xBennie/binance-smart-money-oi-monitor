@@ -13,16 +13,8 @@
  * Usage:
  *   npx tsx src/scripts/mcp-server.ts          # or: npm run mcp
  *
- * Register in Claude Code (~/.claude.json or project .mcp.json):
- *   {
- *     "mcpServers": {
- *       "binance-smart-money": {
- *         "command": "npx",
- *         "args": ["tsx", "src/scripts/mcp-server.ts"],
- *         "cwd": "/absolute/path/to/binance-smart-money-oi-monitor"
- *       }
- *     }
- *   }
+ * Register it with your AI client — one line, no clone, no build:
+ *   claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest
  *
  * All calls hit Binance live through the library's built-in 7-layer rate-limit
  * protection + memory cache, so they are safe to call ad hoc — no cron or local
@@ -41,14 +33,15 @@ if (argv.includes('--help') || argv.includes('-h')) {
   process.stdout.write(
     `binance-smart-money-oi-monitor v${SERVER_INFO.version}\n\n` +
     `This binary is an MCP stdio server. Register it with your AI client:\n` +
-    `  claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor\n\n` +
+    `  claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest\n\n` +
     `Other commands (from a clone, via npm run):\n` +
-    `  npm run analyze <SYMBOL>   one-shot readable report for a coin\n` +
-    `  npm run panel <SYMBOL>     shareable dark-HTML Smart Money card\n` +
+    `  npm run analyze -- <SYMBOL>   one-shot readable report for a coin\n` +
+    `  npm run panel -- <SYMBOL>     shareable dark-HTML Smart Money card\n` +
     `  npm run track              tracker daemon (SMART_MONEY_WATCHLIST, _INTERVAL_MIN)\n` +
-    `  npm run change <SYM> [min] per-side added/reduced over N min (needs tracker)\n` +
+    `  npm run change -- <SYM> [min] [--json]  position change (needs tracker)\n` +
+    `  npm run trend -- <SYM> [min] [--json]   profit trend (needs tracker)\n` +
     `  npm run scan               market-wide most long/short-heavy (needs tracker)\n` +
-    `  npm run chart <SYMBOL>     long/short position + avg-entry time-series chart\n` +
+    `  npm run chart -- <SYMBOL>  long/short position + avg-entry time-series chart\n` +
     `  npm run dashboard          Express dashboard + JSON API (PORT=3001)\n` +
     `  npm run doctor             diagnose Binance reachability / DB / deps\n\n` +
     `Env: SMART_MONEY_DB_PATH (shared db path), SMART_MONEY_WATCHLIST, SMART_MONEY_INTERVAL_MIN.\n` +
@@ -63,7 +56,7 @@ if (process.stdin.isTTY) {
   process.stderr.write(
     'binance-smart-money MCP server (stdio) — meant to be launched by an MCP client,\n' +
     'not run by hand. It is now waiting for JSON-RPC on stdin. Register it, e.g.:\n' +
-    '  claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor\n' +
+    '  claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest\n' +
     '(Ctrl-C to exit.)\n',
   );
 }

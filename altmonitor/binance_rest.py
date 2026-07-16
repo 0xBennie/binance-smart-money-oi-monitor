@@ -45,9 +45,11 @@ class BinanceREST:
                         return await resp.json()
                     if resp.status in (429, 418):
                         retry_after = float(resp.headers.get("Retry-After", 5))
-                        # 418 ban can be long; cap our local wait but keep paused
-                        self._trip(min(retry_after, 120) if resp.status == 429 else retry_after,
-                                   resp.status)
+                        # A 418 ban can carry a Retry-After of hours. Cap the LOCAL
+                        # wait for BOTH 429 and 418 so a single call can't await the
+                        # whole ban and stall the OITracker sweep; we stay paused
+                        # regardless, we just re-check sooner.
+                        self._trip(min(retry_after, 120), resp.status)
                         continue
                     # other errors (e.g. 400 bad symbol): don't retry forever
                     log.debug("%s -> HTTP %s", path, resp.status)

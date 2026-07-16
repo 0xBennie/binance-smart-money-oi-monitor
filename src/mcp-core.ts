@@ -16,12 +16,28 @@ import { getFundingInfo, getFundingIntervalHours, fundingCountdownString } from 
 import { fundingCost } from './funding.js';
 import { isBinanceApiBlocked } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
+import type { CardLang } from './format.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.11.0' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.12.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
-// Auto-attached to every analysis result. This tool reports on-chain/exchange data
-// and structure — it deliberately does NOT emit buy/sell or directional signals.
+// DISCLAIMER RULE: every tool carries it, uniformly. Attached to EVERY
+// data-returning result — a "data, not advice" notice is never wrong on market
+// data, so a uniform rule beats a per-tool judgement call. Only pure error /
+// noData returns skip it (there's no analysis to disclaim). This server reports
+// on-chain/exchange data and structure — it deliberately does NOT emit buy/sell
+// or directional signals.
 export const DISCLAIMER = '仅供数据分析,不构成投资建议。Data & analysis only — not financial advice.';
+
+// longShortRatio is a TRADER/ACCOUNT-COUNT ratio (longTraders ÷ shortTraders per
+// Binance's smart-signal), NOT a notional/position-value ratio — the value-weighted
+// ratio is a separate field (longShortNotionalRatio, surfaced by render_panel). Keep
+// this hint count-based everywhere it's used so no caller mistakes it for a value
+// split. The hint text itself avoids the word "notional" so it can never be read as
+// describing this count ratio as notional.
+export const RATIO_HINT =
+  'longShortRatio = long-side traders ÷ short-side traders (>1 = more traders long). '
+  + 'It is a trader/account COUNT ratio, not a position-value ratio '
+  + '(render_panel exposes the value-weighted long/short split separately).';
 
 // Distinguish "Binance is unreachable / rate-limited right now" from "this symbol
 // isn't supported" — otherwise both look like a bare "no data" to the caller.
@@ -39,6 +55,10 @@ const TT_PERIODS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
 // misleading "symbol unsupported" instead of falling back cleanly.
 function validPeriod(p: unknown): TopTraderPeriod {
   return typeof p === 'string' && (TT_PERIODS as string[]).includes(p) ? (p as TopTraderPeriod) : '5m';
+}
+
+function validLang(lang: unknown): CardLang | undefined {
+  return lang === 'zh' || lang === 'en' ? lang : undefined;
 }
 
 function hoursAgo(ms: number | undefined): number | null {
@@ -61,7 +81,7 @@ async function toolGetSmartMoney(args: any) {
     long: smartMoneySide(sm, 'long'),
     short: smartMoneySide(sm, 'short'),
     signalDayAgeHours: hoursAgo(sm.signalDay),
-    note: 'Per side: smartMoneyUsd = all smart-money traders position (qty×entry, USD); whalesUsd = whale-only position; avgEntry / profitPct / whaleProfitPct are bapi-only (not in public fapi). whalesUsd is 0 when Binance returns no whale qty.',
+    note: `${RATIO_HINT} Per side: smartMoneyUsd = all smart-money traders position (qty×entry, USD); whalesUsd = whale-only position; avgEntry / profitPct / whaleProfitPct are bapi-only (not in public fapi). whalesUsd is 0 when Binance returns no whale qty.`,
     disclaimer: DISCLAIMER,
   };
 }
@@ -80,6 +100,7 @@ async function toolGetTopTrader(args: any) {
     takerBuySellRatio: tt.takerBSR,
     takerBuyVol: tt.takerBuyVol,
     takerSellVol: tt.takerSellVol,
+    disclaimer: DISCLAIMER,
   };
 }
 
@@ -96,6 +117,7 @@ async function toolGetOpenInterest(args: any) {
     oiChg15m: oi.oiChg15m,
     oiChg1h: oi.oiChg1h,
     oiChg4h: oi.oiChg4h,
+    disclaimer: DISCLAIMER,
   };
 }
 
@@ -121,6 +143,7 @@ async function toolGetFullPicture(args: any) {
       totalNotionalUsd: Math.round(smartMoneyNotionalUsd(sm)),
       long: smartMoneySide(sm, 'long'),
       short: smartMoneySide(sm, 'short'),
+      note: RATIO_HINT,
     },
     topTrader: tt && { topPositionLsr: tt.topPositionLSR, takerBuySellRatio: tt.takerBSR },
     openInterest: oi && { oiNowUsd: Math.round(oi.oiNowUsd), oiChg1h: oi.oiChg1h, oiChg4h: oi.oiChg4h },
@@ -181,19 +204,20 @@ async function toolRenderPanel(args: any) {
     note: 'summary has the numbers to talk about; html (when included) is a complete standalone document — save it to a .html file and screenshot it if your client can write files.',
   };
   // includeHtml defaults true; pass false to save context when you only need the numbers.
-  if (args.includeHtml !== false) out.html = renderPanelHtml(data);
+  if (args.includeHtml !== false) out.html = renderPanelHtml(data, validLang(args.lang));
+  out.disclaimer = DISCLAIMER;
   return out;
 }
 
 async function toolRenderPush(args: any) {
   const symbol = normalizeSymbol(args.symbol);
   if (!symbol) return { error: 'symbol is required' };
-  const html = await buildPush(symbol);
+  const html = await buildPush(symbol, validLang(args.lang));
   if (!html) return noData({ symbol });
   return {
     symbol,
     html,
-    note: 'Telegram-ready message body (parse_mode: HTML) — the compact 巨鲸总览 card. Send it via the Bot API sendMessage.',
+    note: 'Telegram-ready message body (parse_mode: HTML) — the compact whale-overview card (rendered in the requested lang). Send it via the Bot API sendMessage.',
     disclaimer: DISCLAIMER,
   };
 }
@@ -220,7 +244,7 @@ async function toolGetChange(args: any) {
   const minutes = Number(args.minutes) > 0 ? Number(args.minutes) : 60;
   return withLocalDb(async () => {
     const { getChange } = await import('./tracking.js');
-    return getChange(symbol, minutes);
+    return { ...getChange(symbol, minutes), disclaimer: DISCLAIMER };
   }, (msg) => ({ symbol, error: msg }));
 }
 
@@ -241,7 +265,7 @@ async function toolRenderChart(args: any) {
     const { buildChart, renderChartHtml } = await import('./chart.js');
     const data = await buildChart(symbol, hours);
     if (data.rows.length < 2) return { symbol, error: `not enough local history for ${symbol}. ${DB_HINT}` };
-    return { symbol, points: data.rows.length, html: renderChartHtml(data), note: 'Save html to a .html file and open/screenshot it.' };
+    return { symbol, points: data.rows.length, html: renderChartHtml(data), note: 'html is a standalone document — save it to a .html file and open/screenshot it.', disclaimer: DISCLAIMER };
   }, (msg) => ({ symbol, error: msg }));
 }
 
@@ -251,7 +275,7 @@ async function toolGetProfitTrend(args: any) {
   const minutes = Number(args.minutes) > 0 ? Number(args.minutes) : 60;
   return withLocalDb(async () => {
     const { getProfitTrend } = await import('./tracking.js');
-    return getProfitTrend(symbol, minutes);
+    return { ...getProfitTrend(symbol, minutes), disclaimer: DISCLAIMER };
   }, (msg) => ({ symbol, error: msg }));
 }
 
@@ -316,17 +340,22 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
     properties: {
       symbol: { type: 'string', description: 'e.g. "BEAT" or "BEATUSDT"' },
       includeHtml: { type: 'boolean', description: 'include the full HTML document (default true)' },
+      lang: { type: 'string', enum: ['zh', 'en'], description: 'card language (default SMART_MONEY_CARD_LANG or zh)' },
     },
     required: ['symbol'],
   },
   render_push: {
     fn: toolRenderPush,
     description:
-      "Render the Telegram '巨鲸总览' push card for a symbol as a parse_mode:HTML message body " +
-      "(whale counts, avg entry, unrealized PNL, profit %). Complements render_panel: render_panel " +
-      "returns a full standalone HTML page to screenshot; render_push returns the compact Telegram " +
-      "message you can send straight to a chat via the Bot API.",
-    properties: { symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' } },
+      "Render the Telegram whale-overview (巨鲸总览) push card for a symbol as a parse_mode:HTML " +
+      "message body (whale counts, avg entry, unrealized PNL, profit %); card language follows the " +
+      "lang arg (zh or en). Complements render_panel: render_panel returns a full standalone HTML " +
+      "page to screenshot; render_push returns the compact Telegram message you can send straight to " +
+      "a chat via the Bot API.",
+    properties: {
+      symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' },
+      lang: { type: 'string', enum: ['zh', 'en'], description: 'card language (default SMART_MONEY_CARD_LANG or zh)' },
+    },
     required: ['symbol'],
   },
   get_change: {

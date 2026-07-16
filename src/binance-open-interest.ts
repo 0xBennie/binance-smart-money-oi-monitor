@@ -26,13 +26,20 @@ const REQ_TIMEOUT_MS = 5_000;
 export interface OpenInterestSnapshot {
   symbol: string;
   ts: number;
-  oiNowUsd: number;            // sumOpenInterestValue, USD
-  oiNowCoins: number;          // sumOpenInterest, base-asset units
-  /** % change vs ~5min ago. null = history bar missing, NOT zero change. */
+  oiNowUsd: number;            // sumOpenInterestValue, USD notional (contracts × mark price)
+  oiNowCoins: number;          // sumOpenInterest, base-asset units (open contracts)
+  // oiChg* = % change in open CONTRACTS (sumOpenInterest / position quantity),
+  // NOT USD notional. Measuring velocity in coins decouples it from price: a pure
+  // price move with flat open contracts registers as ~0 change, which is the point —
+  // Open Interest is a position quantity, so its rate-of-change belongs in coins.
+  /** % change in open contracts vs ~5min ago. null = history bar missing, NOT zero change. */
   oiChg5m: number | null;
+  /** % change in open contracts vs ~15min ago. null = history bar missing, NOT zero change. */
   oiChg15m: number | null;
+  /** % change in open contracts vs ~1h ago. null = history bar missing, NOT zero change. */
   oiChg1h: number | null;
-  oiChg4h: number | null;      // 4h = 47 × 5min bars back
+  /** % change in open contracts vs ~4h ago (47 × 5min bars back). null = history bar missing. */
+  oiChg4h: number | null;
 }
 
 import { capSet } from './cache.js';
@@ -40,11 +47,23 @@ import { capSet } from './cache.js';
 interface CachedOI { snap: OpenInterestSnapshot; fetchedAt: number; }
 const cache = new Map<string, CachedOI>();
 
-interface HistBar {
+/** Minimal shape of a Binance openInterestHist bar (ascending by timestamp). */
+export interface OiHistBar {
+  sumOpenInterest: string;       // coins / open contracts
+  sumOpenInterestValue: string;  // USD notional (contracts × mark price)
+}
+
+interface HistBar extends OiHistBar {
   symbol: string;
-  sumOpenInterest: string;
-  sumOpenInterestValue: string;
   timestamp: number;
+}
+
+/** The four OI velocities, each null when its reference bar is absent/invalid. */
+export interface OiChanges {
+  oiChg5m: number | null;
+  oiChg15m: number | null;
+  oiChg1h: number | null;
+  oiChg4h: number | null;
 }
 
 /** Returns null when prev is missing/invalid — caller should NOT substitute 0. */
@@ -52,6 +71,31 @@ function pctChange(curr: number, prev: number | null): number | null {
   if (prev == null || !Number.isFinite(prev) || prev <= 0) return null;
   if (!Number.isFinite(curr)) return null;
   return ((curr - prev) / prev) * 100;
+}
+
+/**
+ * Compute the 5m/15m/1h/4h OI velocities from the COINS series (sumOpenInterest),
+ * NOT the USD notional series. Bars are ascending by timestamp (latest last).
+ * Reference bars at -1 (~5m ago), -3 (~15m ago), -12 (~1h ago), -47 (~4h ago).
+ * Each field is null when the reference bar is absent/invalid (never substitute 0);
+ * this is the same null-on-missing-bar semantics as pctChange.
+ */
+export function computeOiChanges(bars: readonly OiHistBar[]): OiChanges {
+  const coins = bars.map(b => parseFloat(b.sumOpenInterest));
+  const n = coins.length;
+  const curr = n > 0 ? coins[n - 1] : NaN;
+  const ref = (idxFromEnd: number): number | null => {
+    const i = n - 1 - idxFromEnd;
+    if (i < 0) return null;
+    const v = coins[i];
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+  return {
+    oiChg5m: pctChange(curr, ref(1)),
+    oiChg15m: pctChange(curr, ref(3)),
+    oiChg1h: pctChange(curr, ref(12)),
+    oiChg4h: pctChange(curr, ref(47)),
+  };
 }
 
 export async function getOpenInterest(symbol: string): Promise<OpenInterestSnapshot | null> {
@@ -78,26 +122,16 @@ export async function getOpenInterest(symbol: string): Promise<OpenInterestSnaps
     const oiNowCoins = parseFloat(latest.sumOpenInterest);
     if (!Number.isFinite(oiNowUsd) || oiNowUsd <= 0) return cached?.snap ?? null;
 
-    // Reference bars at -1 (5m ago), -3 (15m ago), -12 (1h ago), -47 (~4h ago)
-    const refUsd = (idxFromEnd: number): number | null => {
-      const i = data.length - 1 - idxFromEnd;
-      if (i < 0) return null;
-      const bar = data[i];
-      if (!bar) return null;
-      const v = parseFloat(bar.sumOpenInterestValue);
-      return Number.isFinite(v) && v > 0 ? v : null;
-    };
+    // Velocities are computed from the COINS series (open contracts), not USD
+    // notional, so a pure price move with flat contracts reads as ~0 change.
+    const changes = computeOiChanges(data);
 
     const snap: OpenInterestSnapshot = {
       symbol,
       ts: Number(latest.timestamp ?? Date.now()),
       oiNowUsd,
       oiNowCoins,
-      // pass refUsd() result through unchanged — pctChange returns null on missing
-      oiChg5m: pctChange(oiNowUsd, refUsd(1)),
-      oiChg15m: pctChange(oiNowUsd, refUsd(3)),
-      oiChg1h: pctChange(oiNowUsd, refUsd(12)),
-      oiChg4h: pctChange(oiNowUsd, refUsd(47)),
+      ...changes,
     };
     capSet(cache, symbol, { snap, fetchedAt: Date.now() });
     return snap;

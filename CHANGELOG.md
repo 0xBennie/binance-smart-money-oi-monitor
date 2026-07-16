@@ -2,6 +2,37 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.12.0
+
+UX integration built on the released `1.11.0` codebase, plus a correctness pass.
+No breaking API changes. One behavioral change: **OI velocity (`oiChg*`) now measures
+the change in open CONTRACTS, not USD notional** (see Correctness). Funding, profit,
+and notional units are unchanged.
+
+**Onboarding and documentation**
+- Added a commented `.env.example` (shipped in the npm package) and complete, equivalent environment-variable tables in both READMEs.
+- Added a zero-install MCP quick start and one canonical install command: `claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest`.
+- Made the shared absolute `SMART_MONEY_DB_PATH` requirement explicit for tracker, dashboard, and all four time-series MCP tools.
+- Added automated documentation contracts for release-version parity, env coverage, MCP commands, CLI examples, unique headings, and local anchors.
+
+**Cards and MCP**
+- `render_panel`, `render_push`, and their library renderers accept `lang: 'zh' | 'en'`; precedence is explicit argument, `SMART_MONEY_CARD_LANG`, then backward-compatible Chinese. The two render tools expose a `lang` enum for per-call language.
+- English cards expand FR, LSR, and SM labels **and localize the footer** — a `lang:'en'` card contains no Chinese (the zh footer stays byte-identical). Numeric values and percentage semantics unchanged.
+- **Ratio hint corrected:** `longShortRatio` is a trader/account COUNT ratio (`longTraders ÷ shortTraders`, `>1` = more traders long) — it is NOT the notional ratio (that's a separate field). The old hint wrongly said "notional". Applied to both `get_smart_money` and `get_full_picture`.
+- **Disclaimer is now uniform:** every data-returning MCP tool carries the data-not-advice disclaimer (previously `get_top_trader` / `get_open_interest` omitted it). `render_push` metadata is language-neutral.
+
+**CLI and dashboard**
+- `--help`/`-h` and (where output is machine-readable) `--json` are now consistent across **all** arg-taking scripts — `change`, `trend`, `scan`, `chart`, `analyze`, `doctor`, `panel` — via a shared `cli-help` helper. `--help` short-circuits before any network/DB work; notably `doctor --help` no longer spends a live BTC fetch.
+- `change` / `trend` print readable tables by default, support `--json`, and return non-zero on data errors. `doctor` prints a final READY / NOT READY verdict and fails only for blocking checks.
+- Dashboard defaults to OI sorting and adds symbol search, match count, empty-state guidance, field legend/tooltips, data/load timestamps, and mobile horizontal scrolling. Missing-DB onboarding covered by an HTTP route regression test.
+
+**Correctness**
+- **OI velocity now coins-based.** `oiChg5m/15m/1h/4h` are computed from `sumOpenInterest` (open contracts), not `sumOpenInterestValue` (USD notional). A pure price move with flat contracts now reads ~0% instead of masquerading as an OI change. `oiNowUsd` and `oiNowCoins` are both still exposed for display.
+
+**altmonitor (Python)**
+- **418 back-off is now capped** at 120s (was applied only to 429; a 418 with a large `Retry-After` could stall the whole OI sweep for hours).
+- **WS reader no longer blocks on HTTP.** The kline handler's LSR fetch runs off the read loop via `asyncio.create_task` (tasks tracked + errors surfaced), and the socket uses a bounded `max_queue` instead of unbounded — so a burst of threshold crossings can't stall frame consumption or grow memory without limit.
+
 ## 1.11.0
 
 An adversarially-verified audit batch — data-integrity, alert reliability, security, and internal consolidation. No breaking API changes (`FundingInfo.markPrice/indexPrice/lastFundingRate` are now `number | null` to stop NaN leaking into output).

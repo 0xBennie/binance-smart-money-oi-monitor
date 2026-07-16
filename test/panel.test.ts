@@ -92,6 +92,45 @@ test('absurdly long ticker is capped, not rendered whole', () => {
   assert.ok(!html.includes('A'.repeat(25)), 'over-long symbol truncated');
 });
 
+test("renderPanelHtml lang='en' uses English labels, default stays Chinese", () => {
+  const d = computePanel(sm, 2.90);
+  const en = renderPanelHtml(d, 'en');
+  assert.match(en, /Smart Money Overview/);
+  assert.match(en, /Total Position/);
+  assert.match(en, /Notional L\/S Ratio/);
+  assert.match(en, /Avg Entry/);
+  assert.match(en, /In-Profit %/);
+  assert.match(en, /Smart Money % of Open Interest/);
+  assert.match(en, /Top-Trader Long\/Short/);
+  assert.match(en, /<html lang="en">/);
+  assert.ok(!en.includes('聪明钱总览') && !en.includes('总持仓') && !en.includes('平均开仓价'));
+  assert.ok(!/https?:\/\//.test(en));
+  assert.ok(en.includes('not financial advice'));
+  // Footer/disclaimer must not leak Chinese in en mode — NO CJK char anywhere.
+  assert.doesNotMatch(en, /[一-鿿]/, 'en panel must contain no CJK characters');
+  // Brand/attribution + repo URL stay in BOTH languages.
+  assert.ok(en.includes('x.com/0xBenniee'), 'X/Twitter promo stays in en');
+  assert.ok(en.includes('github.com/0xBennie/binance-smart-money-oi-monitor'), 'repo URL stays in en');
+  // en stat label is Title Case, matching its header-row siblings.
+  assert.ok(en.includes('>Traders<'), 'en stat label Title Case (Traders)');
+  const zh = renderPanelHtml(d);
+  assert.match(zh, /聪明钱总览/);
+  assert.equal(zh, renderPanelHtml(d, 'zh'));
+});
+
+test('SMART_MONEY_CARD_LANG=en drives panel; explicit param overrides', () => {
+  const prev = process.env.SMART_MONEY_CARD_LANG;
+  try {
+    process.env.SMART_MONEY_CARD_LANG = 'en';
+    const d = computePanel(sm, 2.90);
+    assert.match(renderPanelHtml(d), /Smart Money Overview/);
+    assert.match(renderPanelHtml(d, 'zh'), /聪明钱总览/);
+  } finally {
+    if (prev === undefined) delete process.env.SMART_MONEY_CARD_LANG;
+    else process.env.SMART_MONEY_CARD_LANG = prev;
+  }
+});
+
 test('OI change footer treats oiChg as already-percent (no double ×100)', () => {
   const oi: any = { symbol: 'BEATUSDT', ts: 0, oiNowUsd: 1e7, oiNowCoins: 1, oiChg5m: 0, oiChg15m: 0, oiChg1h: 1.87, oiChg4h: 4.05 };
   const html = renderPanelHtml(computePanel(sm, 2.90, { oi }));
