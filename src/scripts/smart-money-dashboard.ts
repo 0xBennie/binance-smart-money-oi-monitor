@@ -204,12 +204,6 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
   const loadedAt = fmtTs(Date.now());
 
   const trs = sorted.map(r => {
-    const verdict =
-      r.shortProfitPct - r.longProfitPct > 0.2 ? '🔴 空头大赢 (跌)' :
-      r.longProfitPct - r.shortProfitPct > 0.2 ? '🟢 多头大赢 (涨)' :
-      r.shortProfitPct - r.longProfitPct > 0.1 ? '🟡 空头略优' :
-      r.longProfitPct - r.shortProfitPct > 0.1 ? '🟡 多头略优' : '⚪ 势均';
-    const spreadStyle = r.whalePriceSpread > 0.05 ? 'color:#ef4444' : r.whalePriceSpread < -0.05 ? 'color:#22c55e' : '';
     return `
       <tr>
         <td><a href="/symbol/${encodeURIComponent(r.symbol)}">${htmlEscape(r.symbol)}</a></td>
@@ -221,19 +215,18 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
         <td class="r">${fmtPct(r.shortWhaleProfitPct, 0)}</td>
         <td>${fmtNum(r.long_whales_avg_entry_price)}</td>
         <td>${fmtNum(r.short_whales_avg_entry_price)}</td>
-        <td style="${spreadStyle}">${fmtPct(r.whalePriceSpread, 1)}</td>
+        <td>${fmtPct(r.whalePriceSpread, 1)}</td>
         <td>${fmtUsd(r.oi_now_usd)}</td>
         <td ${chgClass(r.oi_chg_1h)}>${fmtChg(r.oi_chg_1h)}</td>
         <td ${chgClass(r.oi_chg_4h)}>${fmtChg(r.oi_chg_4h)}</td>
         <td>${r.smRatio == null ? '—' : fmtPct(r.smRatio, 1)}</td>
-        <td>${verdict}</td>
         <td class="ts">${fmtTs(r.ts)}</td>
       </tr>`;
   }).join('');
 
   const sortLink = (key: string, label: string) =>
     `<a href="?sort=${key}" class="${sort === key ? 'active' : ''}">${label}</a>`;
-  const emptyRow = '<tr><td colspan="16" class="empty">No snapshots yet — the tracker has not captured a sweep. Check back in a few minutes.</td></tr>';
+  const emptyRow = '<tr><td colspan="15" class="empty">No snapshots yet — the tracker has not captured a sweep. Check back in a few minutes.</td></tr>';
   const bodyRows = sorted.length ? trs : emptyRow;
 
   return `<!doctype html>
@@ -310,7 +303,6 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
       <th>OI Δ1h</th>
       <th>OI Δ4h</th>
       <th title="Smart Money notional divided by 2 × total OI, clamped to 100%">SM Share</th>
-      <th>Verdict</th>
       <th>Updated</th>
     </tr></thead>
     <tbody id="dashboard-rows">${bodyRows}</tbody>
@@ -322,7 +314,6 @@ function renderHtml(rows: EnrichedRow[], sort: string): string {
       <dt>LSR</dt><dd>Smart-money long ÷ short ratio.</dd>
       <dt>SM Share</dt><dd>Smart Money share of total OI, clamped to 100%.</dd>
       <dt>Spread</dt><dd>Difference between short- and long-whale average entries.</dd>
-      <dt>🟢 / 🔴 / 🟡 / ⚪</dt><dd>Profit-gap verdict from strong long advantage to balanced positioning.</dd>
     </dl>
   </details>
   <script>

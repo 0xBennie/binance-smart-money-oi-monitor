@@ -22,7 +22,7 @@
 | | `render_panel` / `render_push` | 生成可分享的看板卡 / TG 推送卡 |
 | **时序(4 个,需 tracker 先攒数据)** | `get_change` | 近 N 分钟多空各**加/减多少张**(含**鲸鱼级** + 现价 vs 庄家均价盈亏) |
 | | `get_profit_trend` | 盈利占比随时间变化(**由亏转盈/由盈转亏**) |
-| | `scan_extreme` | 全市场最偏多/最偏空排名 |
+| | `scan_extreme` | 全市场多空比最高/最低排名 |
 | | `render_chart` | **三面板折线图**:多头持仓 / 空头持仓 / 庄家均价 vs 现价 |
 
 ---
@@ -70,7 +70,7 @@ npm run track           # 常驻,每 15 分钟记一针
 ```bash
 SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run change -- BILL 30   # 近30m 多空各加减多少张(含鲸鱼)
 SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run trend -- BILL 120   # 盈利占比 120m 变化
-SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run scan -- 20        # 全市场最偏多/偏空 top20
+SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run scan -- 20        # 全市场多空比最高/最低 top20
 SMART_MONEY_DB_PATH=~/sm/snapshots.db npm run chart -- BILL      # 生成三面板 HTML 图
 npm run dashboard                                              # Web 看板(默认只绑 127.0.0.1)
 ```
