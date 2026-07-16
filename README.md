@@ -71,6 +71,52 @@ and the [Env vars](#env-vars) table.
 
 ---
 
+## What it can do
+
+One data source (Binance Smart Signal + OI + top-trader + funding), consumed six ways. Everything below works today.
+
+### 1. MCP server — 11 tools for any terminal AI (the zero-deploy path)
+
+Register once (`claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest`) and ask in natural language. **Live tools** hit Binance directly — no database, no setup:
+
+| Tool | What it returns |
+|---|---|
+| `get_smart_money` | Per side (long/short): smart-money position (USD), whale-only position, **avg entry price**, and **how many are in profit** — the bapi-only fields fapi can't give |
+| `get_top_trader` | Top-20% trader long/short ratio + Taker buy/sell ratio (shorter-horizon flow) |
+| `get_open_interest` | Total OI (USD **and** coins) + 5m/15m/1h/4h velocity (change in open contracts) |
+| `get_funding` | Funding rate → annualized % + USD paid/received per settlement / day / year |
+| `get_full_picture` | One-shot combined read: smart-money + whales + top-trader + OI + funding + **SM's share of total OI**. The single most useful call |
+| `render_panel` | A shareable dark HTML card (the binance.com Smart Signal look) — `lang: zh\|en` |
+| `render_push` | A Telegram-ready HTML "whale overview" message — `lang: zh\|en` |
+
+**Time-series tools** (need the tracker running — see below): `get_change` (per-side qty added/reduced over N min), `get_profit_trend` (how each side's in-profit % shifted), `scan_extreme` (market-wide most long/short-heavy coins), `render_chart` (3-panel position + whale-cost chart).
+
+Plus **3 ready-made prompt workflows**: `positioning`, `squeeze-scan`, `whale-cost`.
+
+### 2. CLI — `npm run <cmd>` (from a clone)
+
+`analyze <SYM>` (full terminal report) · `change <SYM> [min]` · `trend <SYM> [min]` · `scan [limit]` · `chart <SYM>` · `doctor` (environment/health check) · `panel <SYM>` (write an HTML card). All support `--help`; data commands support `--json`.
+
+### 3. Shareable cards
+
+`render_panel` → a self-contained dark HTML card to screenshot for social; `render_push` → the compact Telegram message body. Both render in **Chinese or English** (`SMART_MONEY_CARD_LANG=zh|en` or the per-call `lang` arg), with a baked-in data-not-advice disclaimer.
+
+### 4. Tracker + local time-series
+
+`smart-money-tick` snapshots the whale overview (+ top-trader + OI) to SQLite on an interval, over a watchlist or the full market. Point the tracker, MCP server, and dashboard at the same absolute `SMART_MONEY_DB_PATH` and the four time-series tools + CLIs read that history.
+
+### 5. Optional web dashboard
+
+`npm run dashboard` serves a local (`127.0.0.1`) sortable table of every tracked symbol — LSR, in-profit %, whale avg, SM-share-of-OI, OI — plus per-symbol 30-day history and a JSON API. Optional; the MCP server is the primary query path.
+
+### 6. Opt-in Telegram alerts + altmonitor
+
+Set `SMART_MONEY_ALERT_TG_TOKEN` + `_CHAT_ID` and the tracker pushes a Telegram alert when a watched symbol's smart-money position moves past a threshold (off by default). Separately, the Python **[altmonitor](altmonitor/)** watches the *whole market* for ±3% price moves / OI anomalies / volume spikes and alerts in real time — it tells you **WHEN** something moves; the Smart Money tools tell you **WHO** is positioned.
+
+> Also usable as a plain [Node library](#as-a-library) or over the [HTTP JSON API](#http-json-api).
+
+---
+
 ## What you get vs. public fapi
 
 | Field | Public `fapi/data` | This repo |

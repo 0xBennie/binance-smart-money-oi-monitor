@@ -64,6 +64,52 @@ claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest
 
 ---
 
+## 它能做什么
+
+一个数据源(Binance 聪明钱 Smart Signal + OI + 头部账户 + 资金费),六种用法。下面全部现在就能用。
+
+### 1. MCP server —— 11 个工具,接入任意终端 AI(零部署,首选)
+
+注册一次(`claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest`),用自然语言问就行。**实时工具**直连 Binance —— 不需要数据库、不需要配置:
+
+| 工具 | 返回什么 |
+|---|---|
+| `get_smart_money` | 每一边(多/空):聪明钱仓位(USD)、**庄家(鲸鱼)仓位**、**开仓均价**、**多少人在盈利** —— 公开 fapi 拿不到的 bapi 独有字段 |
+| `get_top_trader` | 头部 20% 账户多空比 + Taker 主动买卖比(更短周期的资金流) |
+| `get_open_interest` | 总持仓 OI(USD **和** 张数)+ 5m/15m/1h/4h 变化率(按张数,非价格) |
+| `get_funding` | 资金费率 → 年化 % + 每结算/每天/每年 支付或收取的 USD |
+| `get_full_picture` | 一次拿全:聪明钱 + 鲸鱼 + 头部账户 + OI + 资金费 + **聪明钱占总 OI 比**。最有用的一个调用 |
+| `render_panel` | 可分享的暗色 HTML 卡片(binance.com 聪明钱同款)—— `lang: zh\|en` |
+| `render_push` | Telegram 可直发的"巨鲸总览"HTML 消息 —— `lang: zh\|en` |
+
+**时序工具**(需 tracker 在跑,见下):`get_change`(N 分钟内每边加/减了多少张)、`get_profit_trend`(每边盈利占比怎么变的)、`scan_extreme`(全市场最偏多/偏空的币)、`render_chart`(持仓 + 庄家成本 三面板图)。
+
+外加 **3 个开箱即用的 prompt 工作流**:`positioning`、`squeeze-scan`、`whale-cost`。
+
+### 2. CLI —— `npm run <命令>`(clone 后)
+
+`analyze <币>`(完整终端报告)· `change <币> [分钟]` · `trend <币> [分钟]` · `scan [数量]` · `chart <币>` · `doctor`(环境/健康自检)· `panel <币>`(生成 HTML 卡片)。全部支持 `--help`;数据类命令支持 `--json`。
+
+### 3. 可分享卡片
+
+`render_panel` → 自包含暗色 HTML 卡片,截图发社媒;`render_push` → 紧凑的 Telegram 消息体。两者都支持**中文或英文**(`SMART_MONEY_CARD_LANG=zh|en` 或逐调用 `lang` 参数),并内置"仅数据分析,非投资建议"免责声明。
+
+### 4. Tracker + 本地时序
+
+`smart-money-tick` 按间隔把巨鲸总览(+ 头部账户 + OI)快照进 SQLite,可跟监控名单或全市场。让 tracker、MCP server、看板都指向同一个绝对路径 `SMART_MONEY_DB_PATH`,那 4 个时序工具和 CLI 就能读这段历史。
+
+### 5. 可选的网页看板
+
+`npm run dashboard` 在本地(`127.0.0.1`)起一张可排序的表:每个被跟踪币的 LSR、盈利占比、庄家均价、SM占OI、OI,外加单币 30 天历史和 JSON API。**可选** —— 主查询路径是 MCP server。
+
+### 6. 可选 Telegram 告警 + altmonitor
+
+设 `SMART_MONEY_ALERT_TG_TOKEN` + `_CHAT_ID`,tracker 会在被盯的币聪明钱仓位越过阈值时推 Telegram 告警(默认关)。另有 Python **[altmonitor](altmonitor/)** 盯**全市场**的 ±3% 价格波动 / OI 异动 / 爆量并实时告警 —— 它告诉你**什么时候**动了,聪明钱工具告诉你**是谁**在持仓。
+
+> 也可当作普通 [Node 库](#当作库使用)或走 [HTTP JSON API](#http-json-api)。
+
+---
+
 ## 相比公开 fapi，你多拿到什么
 
 | 字段 | 公开 `fapi/data` | 本仓库 |
