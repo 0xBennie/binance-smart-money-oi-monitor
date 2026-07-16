@@ -6,7 +6,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { storage } from '../src/storage.js';
 
-function run(script: 'change' | 'trend', args: string[]) {
+type Script = 'change' | 'trend' | 'scan' | 'chart' | 'analyze' | 'doctor' | 'panel';
+
+function run(script: Script, args: string[]) {
   return spawnSync('npm', ['run', script, '--', ...args], {
     cwd: process.cwd(),
     env: { ...process.env, NO_COLOR: '1' },
@@ -15,7 +17,7 @@ function run(script: 'change' | 'trend', args: string[]) {
   });
 }
 
-function runDirect(script: 'change' | 'trend', args: string[], dbPath: string) {
+function runDirect(script: Script, args: string[], dbPath: string) {
   return spawnSync(process.execPath, ['--import', 'tsx', `src/scripts/${script}.ts`, ...args], {
     cwd: process.cwd(),
     env: { ...process.env, SMART_MONEY_DB_PATH: dbPath, NO_COLOR: '1' },
@@ -24,7 +26,7 @@ function runDirect(script: 'change' | 'trend', args: string[], dbPath: string) {
   });
 }
 
-function runSilentJson(script: 'change' | 'trend', args: string[], dbPath: string) {
+function runSilentJson(script: Script, args: string[], dbPath: string) {
   return spawnSync('npm', ['run', '--silent', script, '--', ...args, '--json'], {
     cwd: process.cwd(),
     env: { ...process.env, SMART_MONEY_DB_PATH: dbPath, NO_COLOR: '1' },
@@ -47,6 +49,35 @@ for (const script of ['change', 'trend'] as const) {
     assert.match(result.stderr, /usage:/i);
   });
 }
+
+// Every arg-taking script must short-circuit on --help / -h with exit 0, print
+// its usage, and do NO live work (no network fetch, no DB read, no error hints).
+const helpScripts: Script[] = ['scan', 'chart', 'analyze', 'doctor', 'panel'];
+for (const script of helpScripts) {
+  for (const flag of ['--help', '-h'] as const) {
+    test(`${script} ${flag} exits 0 with usage and no live work`, () => {
+      const result = run(script, [flag]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, new RegExp(`npm run ${script}`));
+      assert.match(result.stdout, /example:/);
+      // No error hints from network/DB paths should ever leak on --help.
+      assert.doesNotMatch(
+        result.stderr,
+        /no data|no smart-money data|not enough local history|local DB|no fresh local snapshots|better-sqlite3/i,
+      );
+    });
+  }
+}
+
+// doctor must exit BEFORE the live getSmartMoneyOverview('BTCUSDT') fetch: on
+// --help none of the diagnostic checklist rows may print.
+test('doctor --help returns before running the live diagnostic', () => {
+  const result = run('doctor', ['--help']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /npm run doctor/);
+  assert.doesNotMatch(result.stdout, /binance-smart-money-oi-monitor — doctor/);
+  assert.doesNotMatch(result.stdout, /Binance fapi reachable|Smart Money \(BTCUSDT\)|READY/);
+});
 
 test('doctor verdict fails only when blocking checks exist', async () => {
   const helpers: any = await import('../src/scripts/cli-help.js');
@@ -97,6 +128,17 @@ test('change and trend emit readable tables by default and clean JSON on request
       assert.equal(parsed.symbol, 'BEATUSDT');
       assert.equal(parsed.samples, 2);
     }
+
+    const scanHuman = runDirect('scan', [], dbPath);
+    assert.equal(scanHuman.status, 0, scanHuman.stderr);
+    assert.match(scanHuman.stdout, /最偏多|scanned/);
+
+    const scanJson = runSilentJson('scan', [], dbPath);
+    assert.equal(scanJson.status, 0, scanJson.stderr);
+    const scanParsed = JSON.parse(scanJson.stdout);
+    assert.ok(scanParsed.scanned >= 1);
+    assert.ok(Array.isArray(scanParsed.mostLong));
+    assert.equal(scanParsed.mostLong[0].symbol, 'BEATUSDT');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

@@ -6,10 +6,18 @@
 import 'dotenv/config';
 import { buildPanel } from '../panel.js';
 import { fmtUsd, fmtPrice, fmtPct, fmtChg } from '../format-num.js';
+import { maybeHelp, parseFlags } from './cli-help.js';
 
-const sym = process.argv[2];
+const argv = process.argv.slice(2);
+maybeHelp(argv, {
+  usage: 'npm run analyze -- <SYMBOL> [--json]',
+  description: 'One-shot readable Smart Money report for a coin from live data — no server, no AI, just a formatted terminal summary.',
+  example: 'npm run analyze -- BEAT',
+});
+const { json, rest } = parseFlags(argv);
+const sym = rest[0];
 if (!sym) {
-  console.error('usage: npm run analyze <SYMBOL>');
+  console.error('usage: npm run analyze -- <SYMBOL> [--json]');
   process.exit(1);
 }
 
@@ -17,6 +25,10 @@ const d = await buildPanel(sym);
 if (!d) {
   console.error(`no data for ${sym} — retry (transient), or it may not have Smart Signal data. See TROUBLESHOOTING.md.`);
   process.exit(1);
+}
+if (json) {
+  console.log(JSON.stringify(d, null, 2));
+  process.exit(0);
 }
 
 const ratio = d.longShortNotionalRatio;

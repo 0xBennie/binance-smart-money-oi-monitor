@@ -20,9 +20,24 @@ import type { CardLang } from './format.js';
 
 export const SERVER_INFO = { name: 'binance-smart-money', version: '1.12.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
-// Auto-attached to every analysis result. This tool reports on-chain/exchange data
-// and structure — it deliberately does NOT emit buy/sell or directional signals.
+// DISCLAIMER RULE: every tool carries it, uniformly. Attached to EVERY
+// data-returning result — a "data, not advice" notice is never wrong on market
+// data, so a uniform rule beats a per-tool judgement call. Only pure error /
+// noData returns skip it (there's no analysis to disclaim). This server reports
+// on-chain/exchange data and structure — it deliberately does NOT emit buy/sell
+// or directional signals.
 export const DISCLAIMER = '仅供数据分析,不构成投资建议。Data & analysis only — not financial advice.';
+
+// longShortRatio is a TRADER/ACCOUNT-COUNT ratio (longTraders ÷ shortTraders per
+// Binance's smart-signal), NOT a notional/position-value ratio — the value-weighted
+// ratio is a separate field (longShortNotionalRatio, surfaced by render_panel). Keep
+// this hint count-based everywhere it's used so no caller mistakes it for a value
+// split. The hint text itself avoids the word "notional" so it can never be read as
+// describing this count ratio as notional.
+export const RATIO_HINT =
+  'longShortRatio = long-side traders ÷ short-side traders (>1 = more traders long). '
+  + 'It is a trader/account COUNT ratio, not a position-value ratio '
+  + '(render_panel exposes the value-weighted long/short split separately).';
 
 // Distinguish "Binance is unreachable / rate-limited right now" from "this symbol
 // isn't supported" — otherwise both look like a bare "no data" to the caller.
@@ -66,7 +81,7 @@ async function toolGetSmartMoney(args: any) {
     long: smartMoneySide(sm, 'long'),
     short: smartMoneySide(sm, 'short'),
     signalDayAgeHours: hoursAgo(sm.signalDay),
-    note: 'longShortRatio = long ÷ short (>1 means long notional dominates). Per side: smartMoneyUsd = all smart-money traders position (qty×entry, USD); whalesUsd = whale-only position; avgEntry / profitPct / whaleProfitPct are bapi-only (not in public fapi). whalesUsd is 0 when Binance returns no whale qty.',
+    note: `${RATIO_HINT} Per side: smartMoneyUsd = all smart-money traders position (qty×entry, USD); whalesUsd = whale-only position; avgEntry / profitPct / whaleProfitPct are bapi-only (not in public fapi). whalesUsd is 0 when Binance returns no whale qty.`,
     disclaimer: DISCLAIMER,
   };
 }
@@ -85,6 +100,7 @@ async function toolGetTopTrader(args: any) {
     takerBuySellRatio: tt.takerBSR,
     takerBuyVol: tt.takerBuyVol,
     takerSellVol: tt.takerSellVol,
+    disclaimer: DISCLAIMER,
   };
 }
 
@@ -101,6 +117,7 @@ async function toolGetOpenInterest(args: any) {
     oiChg15m: oi.oiChg15m,
     oiChg1h: oi.oiChg1h,
     oiChg4h: oi.oiChg4h,
+    disclaimer: DISCLAIMER,
   };
 }
 
@@ -126,6 +143,7 @@ async function toolGetFullPicture(args: any) {
       totalNotionalUsd: Math.round(smartMoneyNotionalUsd(sm)),
       long: smartMoneySide(sm, 'long'),
       short: smartMoneySide(sm, 'short'),
+      note: RATIO_HINT,
     },
     topTrader: tt && { topPositionLsr: tt.topPositionLSR, takerBuySellRatio: tt.takerBSR },
     openInterest: oi && { oiNowUsd: Math.round(oi.oiNowUsd), oiChg1h: oi.oiChg1h, oiChg4h: oi.oiChg4h },
@@ -199,7 +217,7 @@ async function toolRenderPush(args: any) {
   return {
     symbol,
     html,
-    note: 'Telegram-ready message body (parse_mode: HTML) — the compact 巨鲸总览 card. Send it via the Bot API sendMessage.',
+    note: 'Telegram-ready message body (parse_mode: HTML) — the compact whale-overview card (rendered in the requested lang). Send it via the Bot API sendMessage.',
     disclaimer: DISCLAIMER,
   };
 }
@@ -329,10 +347,11 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
   render_push: {
     fn: toolRenderPush,
     description:
-      "Render the Telegram '巨鲸总览' push card for a symbol as a parse_mode:HTML message body " +
-      "(whale counts, avg entry, unrealized PNL, profit %). Complements render_panel: render_panel " +
-      "returns a full standalone HTML page to screenshot; render_push returns the compact Telegram " +
-      "message you can send straight to a chat via the Bot API.",
+      "Render the Telegram whale-overview (巨鲸总览) push card for a symbol as a parse_mode:HTML " +
+      "message body (whale counts, avg entry, unrealized PNL, profit %); card language follows the " +
+      "lang arg (zh or en). Complements render_panel: render_panel returns a full standalone HTML " +
+      "page to screenshot; render_push returns the compact Telegram message you can send straight to " +
+      "a chat via the Bot API.",
     properties: {
       symbol: { type: 'string', description: 'e.g. "BTC" or "BTCUSDT"' },
       lang: { type: 'string', enum: ['zh', 'en'], description: 'card language (default SMART_MONEY_CARD_LANG or zh)' },

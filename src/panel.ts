@@ -125,13 +125,15 @@ const PANEL_LABELS = {
     inProfit: '↗ 盈利中', inLoss: '↘ 亏损中', position: '当前仓位', avgEntry: '平均开仓价',
     estimatedPnl: '预估 PNL', profitPct: '盈利比例', topLsr: '头部持仓LSR',
     takerBsr: 'Taker买卖比', smOfOi: 'SM占OI', totalOi: '总OI',
+    disclaimer: '仅数据分析,非投资建议 / not financial advice',
   },
   en: {
-    overview: 'Smart Money Overview', totalPosition: 'Total Position', traders: 'traders', ratio: 'Notional L/S Ratio',
+    overview: 'Smart Money Overview', totalPosition: 'Total Position', traders: 'Traders', ratio: 'Notional L/S Ratio',
     long: 'Long', short: 'Short', traderUnit: 'traders', whaleUnit: 'whales',
     inProfit: '↗ in profit', inLoss: '↘ in loss', position: 'Position', avgEntry: 'Avg Entry',
     estimatedPnl: 'Est. PnL', profitPct: 'In-Profit %', topLsr: 'Top-Trader Long/Short',
     takerBsr: 'Taker Buy/Sell Ratio', smOfOi: 'Smart Money % of Open Interest', totalOi: 'Total Open Interest',
+    disclaimer: 'Data and analysis only — not financial advice',
   },
 } satisfies Record<CardLang, Record<string, string>>;
 
@@ -203,7 +205,7 @@ export function renderPanelHtml(d: PanelData, lang?: CardLang): string {
       <span>${when}</span>
       <span>🐦 <b style="color:#eaecef">x.com/0xBenniee</b> · Bennie Strategy</span>
     </div>
-    <div style="margin-top:5px">github.com/0xBennie/binance-smart-money-oi-monitor · 仅数据分析,非投资建议 / not financial advice</div>
+    <div style="margin-top:5px">github.com/0xBennie/binance-smart-money-oi-monitor · ${L.disclaimer}</div>
   </div>
 </div>
 </body></html>`;

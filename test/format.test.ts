@@ -76,6 +76,8 @@ test("lang='en' renders English labels and no Chinese jargon", () => {
   assert.doesNotMatch(html, /\bFR\b/);
   assert.ok(html.includes('x.com/0xBenniee'));
   assert.ok(html.includes('not financial advice'));
+  // The footer must not leak Chinese in en mode — NO CJK char anywhere.
+  assert.doesNotMatch(html, /[一-鿿]/, "en render must contain no CJK characters");
 });
 
 test('default language stays Chinese and explicit language overrides env', () => {

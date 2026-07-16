@@ -56,6 +56,7 @@ const CARD_LABELS = {
     inProfit: '📈 盈利中', inLoss: '📉 亏损中', position: '仓位', avgEntry: '均价',
     unrealizedPnl: '未实现盈亏', profitPct: '盈利比例', dataTime: '数据时间',
     volume24h: '24h Vol', openInterest: 'OI', fundingRate: 'FR',
+    footer: '🐦 x.com/0xBenniee · 仅数据分析,非投资建议 / not financial advice',
   },
   en: {
     perp: 'Perp', overview: 'Whale Overview', totalPosition: 'Total Position', whales: 'whales',
@@ -63,6 +64,7 @@ const CARD_LABELS = {
     inProfit: '📈 in profit', inLoss: '📉 in loss', position: 'Position', avgEntry: 'Avg Entry',
     unrealizedPnl: 'Unrealized PnL', profitPct: 'In-Profit %', dataTime: 'Data time',
     volume24h: '24h Volume', openInterest: 'Open Interest', fundingRate: 'Funding Rate',
+    footer: '🐦 x.com/0xBenniee · Data and analysis only — not financial advice',
   },
 } satisfies Record<CardLang, Record<string, string>>;
 
@@ -157,7 +159,7 @@ export function formatSmartMoneyPush(input: FormatterInput, lang?: CardLang): st
     lines.push(`<i>${L.dataTime} ${new Date(sm.ts).toISOString().slice(0, 19).replace('T', ' ')} UTC</i>`);
   }
   lines.push('');
-  lines.push('<i>🐦 x.com/0xBenniee · 仅数据分析,非投资建议 / not financial advice</i>');
+  lines.push(`<i>${L.footer}</i>`);
 
   return lines.join('\n');
 }

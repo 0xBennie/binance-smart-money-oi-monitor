@@ -106,6 +106,13 @@ test("renderPanelHtml lang='en' uses English labels, default stays Chinese", () 
   assert.ok(!en.includes('聪明钱总览') && !en.includes('总持仓') && !en.includes('平均开仓价'));
   assert.ok(!/https?:\/\//.test(en));
   assert.ok(en.includes('not financial advice'));
+  // Footer/disclaimer must not leak Chinese in en mode — NO CJK char anywhere.
+  assert.doesNotMatch(en, /[一-鿿]/, 'en panel must contain no CJK characters');
+  // Brand/attribution + repo URL stay in BOTH languages.
+  assert.ok(en.includes('x.com/0xBenniee'), 'X/Twitter promo stays in en');
+  assert.ok(en.includes('github.com/0xBennie/binance-smart-money-oi-monitor'), 'repo URL stays in en');
+  // en stat label is Title Case, matching its header-row siblings.
+  assert.ok(en.includes('>Traders<'), 'en stat label Title Case (Traders)');
   const zh = renderPanelHtml(d);
   assert.match(zh, /聪明钱总览/);
   assert.equal(zh, renderPanelHtml(d, 'zh'));

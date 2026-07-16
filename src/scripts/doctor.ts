@@ -8,7 +8,15 @@ import fs from 'node:fs';
 import { preflightBinanceFapi, isBinanceApiBlocked } from '../binance-rate-limit.js';
 import { getSmartMoneyOverview } from '../binance-smart-money.js';
 import { resolveDbPath } from '../storage.js';
-import { doctorVerdict } from './cli-help.js';
+import { doctorVerdict, maybeHelp } from './cli-help.js';
+
+// MUST run before any network/DB work: --help should never spend API budget on
+// the live getSmartMoneyOverview('BTCUSDT') fetch below.
+maybeHelp(process.argv.slice(2), {
+  usage: 'npm run doctor',
+  description: 'Self-diagnosis: is Binance reachable, is the native DB dep OK, is the local snapshot DB populated? Turns "it doesn\'t work" into a checklist. Exits 1 if any blocking issue is found.',
+  example: 'npm run doctor',
+});
 
 const OK = '✅', BAD = '❌', WARN = '⚠️ ';
 const rows: string[] = [];
