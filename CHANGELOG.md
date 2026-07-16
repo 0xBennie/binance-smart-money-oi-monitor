@@ -2,6 +2,29 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.12.1
+
+Data-only pass: every user-facing output now reports numbers without editorial
+interpretation. The project's principle is "data, not views" — labels that told
+the user what the numbers *meant* (direction calls, squeeze/distribution
+framing, winner verdicts) are removed; the numbers themselves are unchanged.
+
+**Removed**
+- MCP prompts `positioning` and `squeeze-scan` (they instructed the model to
+  classify setups as squeeze/distribution and to hunt squeeze candidates).
+  `whale-cost` remains, and all 11 tools are unchanged.
+- Dashboard `Verdict` column ("空头大赢 (跌)" etc.) and its legend row; the
+  underlying Long/Short Profit% columns already carry the data. The whale
+  avg-entry `Spread` column no longer color-codes at an arbitrary ±5%.
+- altmonitor quadrant captions: alerts now print the factual state ("价↑仓↓")
+  without the interpretive suffix ("空头回补/逼空" etc.); the LSR line prints
+  the ratio without a "偏多/偏空" tag.
+- `analyze` CLI bias tag ("偏多/偏空/均衡" at arbitrary 1.15/0.87 cutoffs);
+  `scan` CLI headings now say 多空比最高/最低 instead of 最偏多/最偏空.
+- README "example interpretation" table's verdict column and the predictive
+  claim that a >5% whale avg-entry spread means shorts "are about to get
+  squeezed" — replaced with plain definitions of each field.
+
 ## 1.12.0
 
 UX integration built on the released `1.11.0` codebase, plus a correctness pass.

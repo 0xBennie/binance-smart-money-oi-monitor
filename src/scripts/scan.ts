@@ -34,7 +34,7 @@ if (json) {
 const line = (e: any) =>
   `  ${String(e.symbol).padEnd(16)} LSR ${String(e.longShortRatio).padEnd(8)} 多盈 ${e.longProfitPct ?? '—'}%  空盈 ${e.shortProfitPct ?? '—'}%  (${e.ageMin}m ago)`;
 console.log(`scanned ${res.scanned} symbols\n`);
-console.log('▲ 最偏多 (highest long/short ratio):');
+console.log('▲ 多空比最高 (highest long/short ratio):');
 res.mostLong.forEach((e: any) => console.log(line(e)));
-console.log('\n▼ 最偏空 (lowest long/short ratio):');
+console.log('\n▼ 多空比最低 (lowest long/short ratio):');
 res.mostShort.forEach((e: any) => console.log(line(e)));

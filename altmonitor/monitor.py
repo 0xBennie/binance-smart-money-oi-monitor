@@ -42,12 +42,12 @@ def quadrant(price_up: bool, oi_change: float | None) -> str:
         return "价↑仓N/A" if price_up else "价↓仓N/A"
     oi_up = oi_change >= 0
     if price_up and oi_up:
-        return "价↑仓↑ 多头进场"
+        return "价↑仓↑"
     if price_up and not oi_up:
-        return "价↑仓↓ 空头回补/逼空"
+        return "价↑仓↓"
     if not price_up and oi_up:
-        return "价↓仓↑ 空头进场"
-    return "价↓仓↓ 多头平仓"
+        return "价↓仓↑"
+    return "价↓仓↓"
 
 
 def build_message(a: Alert, quad: str) -> str:
@@ -66,7 +66,7 @@ def build_message(a: Alert, quad: str) -> str:
     if a.amplitude is not None:
         lines.append(f"📐 振幅: {a.amplitude:.1f}%")
     if a.lsr is not None:
-        lines.append(f"⚖️ 多空比: {a.lsr:.2f} ({'偏多' if a.lsr >= 1 else '偏空'})")
+        lines.append(f"⚖️ 多空比: {a.lsr:.2f}")
     lines.append(f"🕐 {now}")
     if config.SMART_MONEY_LINK:
         lines.append(f"🐋 聪明钱: {smart_money_link(a.symbol)}")

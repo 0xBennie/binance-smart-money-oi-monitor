@@ -46,14 +46,14 @@ function section(markdown: string, heading: RegExp): string {
   return end === -1 ? rest : rest.slice(0, end);
 }
 
-test('release version is 1.12.0 in package, lockfile, MCP server, and MCP test', () => {
+test('release version is 1.12.1 in package, lockfile, MCP server, and MCP test', () => {
   const pkg = JSON.parse(read('package.json'));
   const lock = JSON.parse(read('package-lock.json'));
-  assert.equal(pkg.version, '1.12.0');
-  assert.equal(lock.version, '1.12.0');
-  assert.equal(lock.packages[''].version, '1.12.0');
-  assert.match(read('src/mcp-core.ts'), /SERVER_INFO = \{ name: 'binance-smart-money', version: '1\.12\.0' \}/);
-  assert.match(read('test/mcp-core.test.ts'), /serverInfo version 1\.12\.0/);
+  assert.equal(pkg.version, '1.12.1');
+  assert.equal(lock.version, '1.12.1');
+  assert.equal(lock.packages[''].version, '1.12.1');
+  assert.match(read('src/mcp-core.ts'), /SERVER_INFO = \{ name: 'binance-smart-money', version: '1\.12\.1' \}/);
+  assert.match(read('test/mcp-core.test.ts'), /serverInfo version 1\.12\.1/);
 });
 
 test('.env.example covers runtime variables and both README env tables', () => {
@@ -101,8 +101,8 @@ test('.env.example covers runtime variables and both README env tables', () => {
   }
 });
 
-test('release notes and CLI examples describe 1.12.0 behavior', () => {
-  assert.match(read('CHANGELOG.md'), /^## 1\.12\.0$/m);
+test('release notes and CLI examples describe 1.12.1 behavior', () => {
+  assert.match(read('CHANGELOG.md'), /^## 1\.12\.1$/m);
   for (const file of ['README.md', 'README.zh-CN.md', 'GUIDE.zh-CN.md']) {
     const doc = read(file);
     assert.match(doc, /npm run change -- [A-Z]+ \d+/m, `${file} missing separator-safe change example`);

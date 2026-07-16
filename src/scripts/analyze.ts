@@ -32,7 +32,6 @@ if (json) {
 }
 
 const ratio = d.longShortNotionalRatio;
-const bias = ratio == null ? '—' : ratio > 1.15 ? '偏多' : ratio < 0.87 ? '偏空' : '均衡';
 const L = d.long, S = d.short;
 const priceVs = (avg: number) => (d.price != null && avg > 0 ? `${d.price > avg ? '+' : ''}${(((d.price - avg) / avg) * 100).toFixed(1)}%` : '—');
 
@@ -40,7 +39,7 @@ const lines = [
   ``,
   `  ${d.symbol.replace(/USDT$/, '')}  聪明钱分析   现价 ${d.price != null ? '$' + fmtPrice(d.price) : '—'}`,
   `  ${'─'.repeat(52)}`,
-  `  多空比(名义)   ${ratio == null ? '—' : ratio.toFixed(2)}  (${bias})     总持仓 ${fmtUsd(d.totalNotionalUsd)} · ${d.totalTraders} 人`,
+  `  多空比(名义)   ${ratio == null ? '—' : ratio.toFixed(2)}     总持仓 ${fmtUsd(d.totalNotionalUsd)} · ${d.totalTraders} 人`,
   ``,
   `                 多头 ▲                空头 ▼`,
   `  交易员/大户     ${String(L.traders).padEnd(4)}/ ${String(L.whales).padEnd(10)} ${String(S.traders).padEnd(4)}/ ${S.whales}`,

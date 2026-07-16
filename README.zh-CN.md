@@ -82,9 +82,9 @@ claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest
 | `render_panel` | 可分享的暗色 HTML 卡片(binance.com 聪明钱同款)—— `lang: zh\|en` |
 | `render_push` | Telegram 可直发的"巨鲸总览"HTML 消息 —— `lang: zh\|en` |
 
-**时序工具**(需 tracker 在跑,见下):`get_change`(N 分钟内每边加/减了多少张)、`get_profit_trend`(每边盈利占比怎么变的)、`scan_extreme`(全市场最偏多/偏空的币)、`render_chart`(持仓 + 庄家成本 三面板图)。
+**时序工具**(需 tracker 在跑,见下):`get_change`(N 分钟内每边加/减了多少张)、`get_profit_trend`(每边盈利占比怎么变的)、`scan_extreme`(全市场多空比最高/最低的币)、`render_chart`(持仓 + 庄家成本 三面板图)。
 
-外加 **3 个开箱即用的 prompt 工作流**:`positioning`、`squeeze-scan`、`whale-cost`。
+外加**开箱即用的 prompt 工作流**:`whale-cost`。
 
 ### 2. CLI —— `npm run <命令>`(clone 后)
 
@@ -126,15 +126,17 @@ claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest
 **加粗**的那几行才是 Smart Signal 真正有用的地方 —— 它们不只告诉你*哪边持仓更多*，
 而是*此刻哪边真在赚钱*、均价多少。公开 `fapi` 给不了这些。
 
-### 解读示例
+### 数据示例
 
 ```
-币种            多头盈利%   空头盈利%   鲸鱼均价 多/空    判断
-1000RATSUSDT    5%          92%         0.034 / 0.042    🔴 空头大赚（价格已下跌）
-1000LUNCUSDT    71%         41%         0.085 / 0.092    🟢 多头大赚（价格已拉升）
+币种            多头盈利%   空头盈利%   鲸鱼均价 多/空
+1000RATSUSDT    5%          92%         0.034 / 0.042
+1000LUNCUSDT    71%         41%         0.085 / 0.092
 ```
 
-当 `空头鲸鱼均价 > 多头鲸鱼均价` 超过 5% 时，通常意味着空头进场太晚、即将被逼空。
+`多头/空头盈利%` 是该方向当前处于盈利状态的交易者占比；`鲸鱼均价 多/空` 是多头鲸鱼
+和空头鲸鱼各自的平均开仓价，看板的 `Spread` 列就是两者之差。这些数字对价格意味着
+什么，由你自己判断 —— 本项目只报数字，不给观点。
 
 ---
 
@@ -389,7 +391,7 @@ JSON-RPC，在你调用 DB 类工具（`get_change` / `get_profit_trend` / `scan
 | `render_panel` | `symbol`, `includeHtml?`, `lang?` | 可分享的深色 HTML 聪明钱卡片；`lang` 可为 `zh` 或 `en`；返回 `{ summary, html, disclaimer }` |
 | `render_push` | `symbol`, `lang?` | 中文或英文 Telegram `parse_mode:HTML` 卡片，并附数据非建议免责声明 |
 | `get_change` | `symbol`, `minutes?` | 近 N 分钟多空各**加仓/减仓**多少（qty 口径，非 USD）—— 读本地 DB，需 tracker 在跑 |
-| `scan_extreme` | `limit?`, `maxAgeMin?` | 全市场**最偏多 / 最偏空**代币（按聪明钱 LSR）—— 读本地 DB |
+| `scan_extreme` | `limit?`, `maxAgeMin?` | 全市场**多空比最高 / 最低**代币（按聪明钱 LSR）—— 读本地 DB |
 | `render_chart` | `symbol`, `hours?` | **深色 HTML 时序图** —— 三面板折线:多头持仓量、空头持仓量、庄家均价 vs 现价 —— 读本地 DB |
 | `get_profit_trend` | `symbol`, `minutes?` | 每侧**盈利占比**(交易员+庄家)N 分钟内的变化 —— 捕捉"由亏转盈/由盈转亏"翻转 —— 读本地 DB |
 
@@ -471,7 +473,7 @@ SMART_MONEY_WATCHLIST=BEAT,BIRB,MAGMA SMART_MONEY_INTERVAL_MIN=15 npm run track
 npm run change -- MAGMA 15 # 人类可读表格（近 ~15 分钟 qty 差值）
 npm run trend -- MAGMA 120 # 交易员/庄家盈利占比趋势
 npm run --silent change -- MAGMA 15 --json # 不带 npm 横幅的机器可读 JSON
-npm run scan               # → 按 LSR 列最偏多 / 最偏空的币
+npm run scan               # → 按 LSR 列多空比最高 / 最低的币
 npm run chart -- BEAT 24   # → beat-chart.html：多空持仓 + 均价 24h 时序图
 ```
 

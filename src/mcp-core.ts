@@ -18,7 +18,7 @@ import { isBinanceApiBlocked } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
 import type { CardLang } from './format.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.12.0' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.12.1' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // DISCLAIMER RULE: every tool carries it, uniformly. Attached to EVERY
 // data-returning result — a "data, not advice" notice is never wrong on market
@@ -411,16 +411,6 @@ export const TOOLS: Record<string, { fn: (args: any) => Promise<any>; descriptio
 // ── Prompts (example workflows, so a new user knows what to ask) ─────────────
 
 export const PROMPTS: Record<string, { description: string; arguments: { name: string; description: string; required?: boolean }[]; build: (a: any) => string }> = {
-  positioning: {
-    description: "Read a coin's smart-money positioning and call it (squeeze / distribution / neutral).",
-    arguments: [{ name: 'symbol', description: 'e.g. BEAT', required: true }],
-    build: (a) => `Use get_full_picture for ${a.symbol || 'the symbol'}. Then tell me, plainly: which side is crowded, whose average entry is underwater vs in profit, where price sits relative to the whale cost lines, and whether this looks like a short squeeze, a long distribution, or neutral. Note OI velocity and funding. Remember this is data/context, not a signal.`,
-  },
-  'squeeze-scan': {
-    description: 'Find short-squeeze candidates across the market (needs the tracker running).',
-    arguments: [],
-    build: () => `Use scan_extreme to list the most short-heavy coins. For the top 3, call get_full_picture and flag any short-squeeze setup: crowded shorts that are underwater (low short profit%), OI rising, and negative funding. Summarize as a short ranked list; not financial advice.`,
-  },
   'whale-cost': {
     description: 'Whale average entry (cost lines) for a coin and where price is vs them.',
     arguments: [{ name: 'symbol', description: 'e.g. ETH', required: true }],

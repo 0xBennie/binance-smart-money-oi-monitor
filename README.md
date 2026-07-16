@@ -91,7 +91,7 @@ Register once (`claude mcp add smartmoney -- npx -y binance-smart-money-oi-monit
 
 **Time-series tools** (need the tracker running — see below): `get_change` (per-side qty added/reduced over N min), `get_profit_trend` (how each side's in-profit % shifted), `scan_extreme` (market-wide most long/short-heavy coins), `render_chart` (3-panel position + whale-cost chart).
 
-Plus **3 ready-made prompt workflows**: `positioning`, `squeeze-scan`, `whale-cost`.
+Plus a **ready-made prompt workflow**: `whale-cost`.
 
 ### 2. CLI — `npm run <cmd>` (from a clone)
 
@@ -134,16 +134,18 @@ The **bold** rows are what makes Smart Signal useful — they tell you not just
 *which side has more positions*, but *which side is actually making money right
 now*, and at what average entry. Public `fapi` can't tell you any of that.
 
-### Example interpretation
+### Example data
 
 ```
-Symbol            Long Profit%   Short Profit%   Whale Avg L/S    Verdict
-1000RATSUSDT      5%             92%             0.034 / 0.042    🔴 shorts winning big (price has dropped)
-1000LUNCUSDT      71%            41%             0.085 / 0.092    🟢 longs winning big (price has run)
+Symbol            Long Profit%   Short Profit%   Whale Avg L/S
+1000RATSUSDT      5%             92%             0.034 / 0.042
+1000LUNCUSDT      71%            41%             0.085 / 0.092
 ```
 
-When `Short Whale Avg Entry > Long Whale Avg Entry` by >5%, it usually means
-shorts entered too late and are about to get squeezed.
+`Long/Short Profit%` is the share of each side's traders currently in profit.
+`Whale Avg L/S` are the average entry prices of long whales and short whales;
+the dashboard's `Spread` column is the difference between the two. What any of
+it means for price is up to you — this project reports the numbers, not a view.
 
 ---
 
@@ -552,7 +554,7 @@ From a clone (`npm run <cmd>`). `binance-smart-money-oi-monitor --help` / `--ver
 ```
   BEAT  聪明钱分析   现价 $0.11
   ────────────────────────────────────────────────────
-  多空比(名义)   1.12  (均衡)     总持仓 $16.6M · 544 人
+  多空比(名义)   1.12     总持仓 $16.6M · 544 人
 
                  多头 ▲                空头 ▼
   交易员/大户     347 / 108        197 / 67
