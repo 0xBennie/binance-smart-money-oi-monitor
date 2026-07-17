@@ -56,7 +56,7 @@ test('release version is 1.12.1 in package, lockfile, MCP server, and MCP test',
   assert.match(read('test/mcp-core.test.ts'), /serverInfo version 1\.12\.1/);
 });
 
-test('.env.example covers runtime variables and both README env tables', () => {
+test('.env.example covers runtime variables and both deployment-doc env tables', () => {
   const envPath = path.join(ROOT, '.env.example');
   assert.ok(fs.existsSync(envPath), '.env.example must exist');
   const example = read('.env.example');
@@ -77,9 +77,13 @@ test('.env.example covers runtime variables and both README env tables', () => {
   const runtimeVars = new Set([...runtime.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)].map((m) => m[1]!));
   for (const name of runtimeVars) assert.ok(exampleVars.has(name), `.env.example missing runtime variable ${name}`);
 
-  for (const file of ['README.md', 'README.zh-CN.md']) {
+  const envDocs: Array<[string, RegExp]> = [
+    ['docs/DEPLOYMENT.md', /^## Env vars\s*$/m],
+    ['docs/DEPLOYMENT.zh-CN.md', /^## 环境变量\s*$/m],
+  ];
+  for (const [file, heading] of envDocs) {
     const doc = read(file);
-    const envSection = section(doc, file === 'README.md' ? /^### Env vars\s*$/m : /^### 环境变量\s*$/m);
+    const envSection = section(doc, heading);
     for (const name of exampleVars) {
       assert.match(envSection, new RegExp(`\\b${name}\\b`), `${file} env table missing ${name}`);
     }
@@ -103,7 +107,7 @@ test('.env.example covers runtime variables and both README env tables', () => {
 
 test('release notes and CLI examples describe 1.12.1 behavior', () => {
   assert.match(read('CHANGELOG.md'), /^## 1\.12\.1$/m);
-  for (const file of ['README.md', 'README.zh-CN.md', 'GUIDE.zh-CN.md']) {
+  for (const file of ['docs/DEPLOYMENT.md', 'docs/DEPLOYMENT.zh-CN.md', 'GUIDE.zh-CN.md']) {
     const doc = read(file);
     assert.match(doc, /npm run change -- [A-Z]+ \d+/m, `${file} missing separator-safe change example`);
     assert.match(doc, /npm run trend -- [A-Z]+ \d+/m, `${file} missing separator-safe trend example`);
@@ -123,7 +127,7 @@ test('MCP install command is canonical everywhere', () => {
   }
 });
 
-for (const file of ['README.md', 'README.zh-CN.md']) {
+for (const file of ['README.md', 'README.zh-CN.md', 'docs/DEPLOYMENT.md', 'docs/DEPLOYMENT.zh-CN.md']) {
   test(`${file} has unique H2 headings and valid local anchors`, () => {
     const doc = read(file);
     const h2 = [...doc.matchAll(/^##\s+(.+)$/gm)].map((m) => githubSlug(m[1]!));

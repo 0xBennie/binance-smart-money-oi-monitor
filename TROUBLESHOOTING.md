@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Every gotcha we (or an audit) actually hit, and the fix. Severity: 🔴 common / will-block · 🟡 situational · 🟢 minor. [简体版见 README.zh-CN.md 的「常见问题」](README.zh-CN.md#常见问题).
+Every gotcha we (or an audit) actually hit, and the fix. Severity: 🔴 common / will-block · 🟡 situational · 🟢 minor. [简体版见 docs/DEPLOYMENT.zh-CN.md 的「常见问题」](docs/DEPLOYMENT.zh-CN.md#常见问题).
 
 ## Data availability & rate limits
 
