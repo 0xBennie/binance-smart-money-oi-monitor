@@ -16,10 +16,10 @@ test('tools/list exposes all five+ tools including render_panel and render_push'
   }
 });
 
-test('initialize reports serverInfo version 1.12.1', async () => {
+test('initialize reports serverInfo version 1.13.0', async () => {
   const resp: any = await handle({ jsonrpc: '2.0', id: 2, method: 'initialize' });
-  assert.equal(resp.result.serverInfo.version, '1.12.1');
-  assert.equal(SERVER_INFO.version, '1.12.1');
+  assert.equal(resp.result.serverInfo.version, '1.13.0');
+  assert.equal(SERVER_INFO.version, '1.13.0');
 });
 
 test('render_panel and render_push expose a lang enum (per-call card language)', async () => {

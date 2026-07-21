@@ -8,6 +8,9 @@ import {
   clearBinanceApiBlocked,
   updateBinanceUsedWeight,
   getBinanceWeightUtilization,
+  markBinanceNetworkError,
+  clearBinanceNetworkError,
+  wasBinanceUnreachable,
 } from '../src/binance-rate-limit.js';
 
 test('detectBinanceBlockStatus maps HTTP codes to severity', () => {
@@ -46,4 +49,31 @@ test('circuit breaker trips on a soft hit and clears', () => {
   assert.equal(isBinanceApiBlocked(), true);
   clearBinanceApiBlocked();
   assert.equal(isBinanceApiBlocked(), false);
+});
+
+// Regression: a failed fetch (timeout / 503 / geo-edge block) must be reported as a
+// reachability problem, NOT as "symbol unsupported". The response interceptor marks the
+// flag on EVERY rejection and clears it only on a 2xx; noData() reads it to pick the
+// message. (Bug: a 503 from a geo-restricted region was misreported as an unsupported
+// symbol, sending exactly the users who need HTTPS_PROXY the wrong way.)
+test('reachability flag: set on a failed fetch, cleared by a usable 2xx response', () => {
+  clearBinanceNetworkError();
+  assert.equal(wasBinanceUnreachable(), false);
+  markBinanceNetworkError();   // interceptor onRejected: no response OR non-2xx (503/451/…)
+  assert.equal(wasBinanceUnreachable(), true, 'a failed fetch flags Binance as unreachable');
+  clearBinanceNetworkError();  // interceptor onFulfilled: a 2xx proves reachability
+  assert.equal(
+    wasBinanceUnreachable(),
+    false,
+    'a 2xx clears it — an empty 2xx body then means unsupported symbol, not unreachable',
+  );
+});
+
+test('reachability failure never trips the rate-limit circuit breaker (distinct concepts)', () => {
+  clearBinanceApiBlocked();
+  clearBinanceNetworkError();
+  markBinanceNetworkError();
+  assert.equal(wasBinanceUnreachable(), true);
+  assert.equal(isBinanceApiBlocked(), false, 'a timeout/503 must not freeze all calls like a 418/429 does');
+  clearBinanceNetworkError();
 });

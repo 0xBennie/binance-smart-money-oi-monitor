@@ -17,7 +17,12 @@ is published. Do the one-time setup below and you never touch an npm token again
 
 ## Cutting a release
 
-1. Bump `version` in `package.json` (and it flows to the MCP `serverInfo`).
+1. Bump the version. `npm version --no-git-tag-version X.Y.Z` updates
+   `package.json` + `package-lock.json`, then update the two spots that DON'T
+   auto-follow: `SERVER_INFO` in `src/mcp-core.ts` and the version strings in
+   `test/mcp-core.test.ts` + `test/docs-contract.test.ts`. Add a `## X.Y.Z`
+   entry to `CHANGELOG.md`. `npm test` (the docs-contract test) enforces that
+   all of these match.
 2. Merge to `main`.
 3. Create a GitHub Release on a `vX.Y.Z` tag with notes:
    ```bash

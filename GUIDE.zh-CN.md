@@ -1,5 +1,7 @@
 # 新手指南 — binance-smart-money-oi-monitor
 
+[English](GUIDE.md) · **简体中文**
+
 > 5 分钟搞懂:这个库能看什么、怎么用、拿真实案例走一遍。
 > **它是数据/上下文工具,不是买卖信号** —— 聪明钱持仓对"接下来涨不涨"没有被验证的预测力(AUC≈0.5)。用它看"谁在哪边、成本多少、赚没赚",不要当信号跟。
 > 由 [Bennie Strategy](https://x.com/0xBenniee) 出品 · X [@0xBenniee](https://x.com/0xBenniee) · Telegram [@OxBennie](https://t.me/OxBennie)

@@ -79,6 +79,34 @@ export function clearBinanceApiBlocked(): void {
   _consecutiveSoftHits = 0;
 }
 
+// ── Reachability flag ────────────────────────────────────────────────────────
+// A failed fetch to Binance (a connection timeout/reset/DNS failure in a geo-blocked
+// region, OR a non-2xx like 503/451 from an edge block) is NOT "symbol unsupported" —
+// but it also must NOT trip the circuit breaker (that would freeze every call for
+// minutes on a single blip). Record the last failed fetch so noData() can tell a
+// reachability problem apart from a genuine 2xx-empty response. Set on EVERY rejection;
+// cleared only by a 2xx — the one outcome where an empty body really does mean the
+// symbol has no data.
+let _lastNetworkErrorAt = 0;
+const NETWORK_ERROR_TTL_MS = 60_000;
+
+export function markBinanceNetworkError(): void {
+  _lastNetworkErrorAt = Date.now();
+}
+
+export function clearBinanceNetworkError(): void {
+  _lastNetworkErrorAt = 0;
+}
+
+/** True when the most recent Binance request failed to return a usable response within
+ * the last minute — a connection-level failure (timeout/DNS/reset) OR a non-2xx status
+ * (503/451/5xx edge blocks). Means Binance is effectively UNREACHABLE from here, NOT
+ * that the symbol is unsupported. Distinct from isBinanceApiBlocked() (a 418/429/403
+ * WAF trip). Each failed retry refreshes the timestamp, so a persistent failure stays fresh. */
+export function wasBinanceUnreachable(): boolean {
+  return _lastNetworkErrorAt !== 0 && Date.now() - _lastNetworkErrorAt < NETWORK_ERROR_TTL_MS;
+}
+
 export function detectBinanceBlockStatus(error: any): 'hard' | 'soft' | null {
   const status = error?.response?.status;
   if (status === 403) return 'hard';
@@ -210,6 +238,28 @@ binanceHttp.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Track reachability off the shared client so every caller (smart-money, top-trader,
+// oi, ticker) contributes without duplicating the logic in four catch blocks. Only a
+// 2xx means Binance actually gave us a usable answer — and that is the ONLY outcome
+// that, with an empty body, legitimately means "symbol unsupported". EVERY rejection is
+// a fetch that yielded no usable data: a response-less connection failure
+// (DNS/timeout/reset/abort) OR a non-2xx status (503/451 and other 5xx/edge blocks —
+// axios rejects everything outside 2xx by default). Mark them all so noData() never
+// misreports a fetch failure as an unsupported symbol. A genuine rate-limit block
+// (403/418/429) also lands here, but isBinanceApiBlocked() takes priority in noData(),
+// so the block message still wins. Re-reject the ORIGINAL error unchanged so downstream
+// catch blocks and detectBinanceBlockDetails() still see error.response.status.
+binanceHttp.interceptors.response.use(
+  (resp) => {
+    clearBinanceNetworkError();   // 2xx: Binance answered with a usable response
+    return resp;
+  },
+  (error) => {
+    markBinanceNetworkError();    // no response OR non-2xx (503/451/…): no usable answer
+    return Promise.reject(error);
+  }
+);
 
 /**
  * Pre-flight check: ping fapi once before a cron starts.

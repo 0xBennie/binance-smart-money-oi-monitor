@@ -14,11 +14,11 @@ import { buildPanel, renderPanelHtml } from './panel.js';
 import { buildPush } from './push.js';
 import { getFundingInfo, getFundingIntervalHours, fundingCountdownString } from './binance-ticker.js';
 import { fundingCost } from './funding.js';
-import { isBinanceApiBlocked } from './binance-rate-limit.js';
+import { isBinanceApiBlocked, wasBinanceUnreachable } from './binance-rate-limit.js';
 import { normalizeSymbol } from './symbol.js';
 import type { CardLang } from './format.js';
 
-export const SERVER_INFO = { name: 'binance-smart-money', version: '1.12.1' };
+export const SERVER_INFO = { name: 'binance-smart-money', version: '1.13.0' };
 export const PROTOCOL_VERSION = '2025-06-18';
 // DISCLAIMER RULE: every tool carries it, uniformly. Attached to EVERY
 // data-returning result — a "data, not advice" notice is never wrong on market
@@ -46,6 +46,8 @@ function noData(fields: Record<string, unknown>): Record<string, unknown> {
     ...fields,
     error: isBinanceApiBlocked()
       ? 'Binance is temporarily rate-limited/blocked — retry shortly, or run from a region where Binance is reachable.'
+      : wasBinanceUnreachable()
+      ? 'cannot reach Binance — the request timed out, the connection failed, or Binance returned a server/edge error (e.g. 503). Common in geo-restricted regions: check your network, set HTTPS_PROXY, or run from a region where Binance is reachable. This is a connectivity problem, not an unsupported symbol.'
       : 'no data — the symbol may be unsupported (not a Binance USDT-perpetual).',
   };
 }
@@ -143,6 +145,7 @@ async function toolGetFullPicture(args: any) {
       totalNotionalUsd: Math.round(smartMoneyNotionalUsd(sm)),
       long: smartMoneySide(sm, 'long'),
       short: smartMoneySide(sm, 'short'),
+      signalDayAgeHours: hoursAgo(sm.signalDay),
       note: RATIO_HINT,
     },
     topTrader: tt && { topPositionLsr: tt.topPositionLSR, takerBuySellRatio: tt.takerBSR },
