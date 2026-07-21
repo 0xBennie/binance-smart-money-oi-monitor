@@ -34,8 +34,10 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
-      # npm >= 11.5 is required for OIDC trusted publishing.
-      - run: npm install -g npm@latest
+      # npm >= 11.5 is required for OIDC trusted publishing. Pin to 11.x on purpose:
+      # npm@latest is now 12.x, which requires Node >= 22.22.2 and so fails EBADENGINE
+      # on this Node 20 runner. npm@11 supports Node 20 and still has OIDC (>= 11.5).
+      - run: npm install -g npm@11
       # Skip cleanly if this version is already on npm (e.g. a Release created for
       # an already-published version) instead of failing the run on a duplicate.
       - id: published
