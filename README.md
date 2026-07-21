@@ -7,104 +7,149 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-> A **[Bennie Strategy](https://x.com/0xBenniee)** project · [X @0xBenniee](https://x.com/0xBenniee) · [Telegram @OxBennie](https://t.me/OxBennie)
+> Built by **[Bennie](https://x.com/0xBenniee)** ([Bennie Strategy](https://x.com/0xBenniee)) · [X @0xBenniee](https://x.com/0xBenniee) · [Telegram @OxBennie](https://t.me/OxBennie)
 
-**See the whale data behind Binance's "Smart Money" tab — the fields the public API doesn't expose.**
+## What is this?
 
-For any Binance USDT perpetual, it answers: *which side are the whales on, at
-what average entry price, and are they actually in profit right now?* No API
-key, no sign-up. **Numbers only — every output reports data, never a trading view.**
+Binance's website has a **"Smart Money"** tab that shows where the big traders
+(whales) are positioned on each coin. This tool pulls that data for **any Binance
+USDT perpetual** — so you, or your AI, can just ask, instead of clicking around
+the website.
 
-![Binance Smart Money panel](https://raw.githubusercontent.com/0xBennie/binance-smart-money-oi-monitor/main/docs/panel-preview.png)
+It answers one simple question:
 
-## Quick start
+> **Which side are the whales on, what price did they buy in at, and are they
+> winning right now?**
 
-Register the MCP server with your AI client — no clone, no build, no config:
+No API key. No sign-up. It only shows data — it never tells you to buy or sell.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/0xBennie/binance-smart-money-oi-monitor/main/docs/panel-preview-en.png" width="49%" alt="Smart Money card (English)">
+  <img src="https://raw.githubusercontent.com/0xBennie/binance-smart-money-oi-monitor/main/docs/panel-preview.png" width="49%" alt="Smart Money card (中文)">
+</p>
+
+## Install
+
+You need **[Node.js](https://nodejs.org) 20 or newer** (check with `node -v`).
+Then pick one of the two ways below.
+
+### Option 1 — Add it to your AI (recommended, nothing to download)
+
+**Claude Code (CLI):** one command —
 
 ```bash
 claude mcp add smartmoney -- npx -y binance-smart-money-oi-monitor@latest
 ```
 
-Then ask: *"What's the smart-money positioning on ETH?"*
+**Cursor, Claude Desktop, Codex, or any other MCP client:** add this to the
+client's MCP config file —
 
-Works with any MCP client (Claude Code / Desktop, Codex CLI, Cursor, Windsurf,
-Cline, Zed, …). Geo-restricted region? Set `HTTPS_PROXY=http://host:port`.
+```json
+{
+  "mcpServers": {
+    "smartmoney": {
+      "command": "npx",
+      "args": ["-y", "binance-smart-money-oi-monitor@latest"]
+    }
+  }
+}
+```
 
-## What you get that public `fapi` doesn't have
+Restart the app, and you're done. Now just ask in plain language.
 
-It calls the same endpoint the binance.com **Smart Signal** page uses, which
-exposes fields absent from the public futures API:
-
-| Exclusive field | What it tells you |
-|---|---|
-| `longWhalesAvgEntryPrice` / `shortWhalesAvgEntryPrice` | Whale average entry per side — cost lines vs current price |
-| `longProfitTraders` / `shortProfitTraders` | How many traders on each side are in profit **right now** |
-| `longProfitWhales` / `shortProfitWhales` | Same, whales only |
-| Smart Money share of total OI (derived) | How much of the market the smart money *is* |
-
-Standard data (top-trader long/short ratio, taker buy/sell, OI + velocity,
-funding) is pulled too, so one call gives the full picture. Not *which side is
-bigger* — *which side is making money, and from what entry.*
-
-## Tools
-
-7 live tools (straight from Binance) + 4 time-series tools (need the local
-tracker, see below):
-
-| Tool | Returns |
-|---|---|
-| `get_full_picture` ⭐ | One-shot: smart money + whales + top traders + OI + funding |
-| `get_smart_money` | Per-side positions, **whale avg entry**, **in-profit counts** |
-| `get_top_trader` | Top-20% account LSR + taker buy/sell ratio |
-| `get_open_interest` | OI (USD & contracts) + 5m/15m/1h/4h velocity |
-| `get_funding` | Funding rate → annualized % and USD cost |
-| `render_panel` / `render_push` | Shareable HTML card / Telegram message (`zh`/`en`) |
-| `get_change` * | Qty each side added/reduced over N minutes |
-| `get_profit_trend` * | How each side's in-profit % moved over N minutes |
-| `scan_extreme` * | Market-wide highest / lowest smart-money LSR |
-| `render_chart` * | 3-panel chart: long/short positions + whale entry vs price |
-
-`*` needs history — run the tracker to accumulate snapshots (SQLite, 30-day
-retention):
+### Option 2 — Run it yourself (for the dashboard, charts & history)
 
 ```bash
-SMART_MONEY_WATCHLIST=BTC,ETH,SOL SMART_MONEY_INTERVAL_MIN=15 npm run track
+git clone https://github.com/0xBennie/binance-smart-money-oi-monitor.git
+cd binance-smart-money-oi-monitor
+npm install
+
+npm run analyze -- ETH      # test it — prints a full report in your terminal
+npm run dashboard           # web dashboard at http://127.0.0.1:3001
 ```
+
+## Example
+
+**You ask:** *"What's the smart money doing on KAITO?"*
+
+**You get back** (this is the English card shown above, in plain numbers):
+
+| | Long side | Short side |
+|---|---|---|
+| Avg entry price | $0.625 | $0.595 |
+| In profit now | **82%** | 15% |
+| Position size | $28.8M | $14.9M |
+
+Current price: **$0.88** — plus open interest, funding rate, and the top-trader
+ratio, all in one answer.
+
+In plain terms: the whales are mostly **long**, they got in around **$0.62**, and
+with price at **$0.88** about **82% of them are in the green** right now — the
+stuff Binance shows on its website but doesn't hand you through the normal API.
+
+> ⏱️ Note: Smart Money is Binance's **daily** signal, so these entry/profit
+> numbers refresh about once a day, not every second — great for "where do the
+> big players stand," not for second-by-second scalping.
+
+## What you can ask for
+
+Just ask naturally; your AI picks the right tool.
+
+| To find out... | Tool |
+|---|---|
+| **Everything about a coin** (start here) | `get_full_picture` |
+| Whale positions & entry prices | `get_smart_money` |
+| Top-trader long/short + taker buy/sell | `get_top_trader` |
+| Open interest + how fast it's moving | `get_open_interest` |
+| Funding rate → yearly % and $ cost | `get_funding` |
+| A **shareable card** (the images above) | `render_panel` |
+| A ready-to-send Telegram message | `render_push` |
+
+You can also track a coin **over time** — how positions changed, whether the
+whales are getting greener or redder, and a chart of it all (`get_change`,
+`get_profit_trend`, `scan_extreme`, `render_chart`). These need the tracker
+running; see the [deployment guide](docs/DEPLOYMENT.md).
+
+There's even a ready-made prompt, `whale-cost` — ask it and it tells you how far
+the price is from the whales' entry.
 
 ## Other ways to use it
 
-- **CLI** — `npm run analyze -- <SYM>` for a one-shot readable report; also
-  `panel`, `doctor`, `change`, `trend`, `scan`, `chart`, `dashboard`.
-- **Dashboard + JSON API** — `npm run dashboard` → sortable table of every
-  tracked symbol at `http://127.0.0.1:3001`.
-- **Telegram alerts** — tracker alerts on smart-money position jumps;
-  [altmonitor](altmonitor/README.md) (Python) adds full-market price/OI/volume
-  burst alerts over one WebSocket. `docker compose up -d` runs the whole stack.
-- **Library** — `npm install binance-smart-money-oi-monitor`, then
-  `getSmartMoneyOverview('BTCUSDT')` for the raw 17 whale fields.
+- **Command line** — `npm run analyze -- ETH` prints a full report in your terminal.
+- **Web dashboard** — `npm run dashboard` gives you a sortable table of every coin you track.
+- **Alerts** — get a Telegram ping when whale positions jump; the Python
+  [altmonitor](altmonitor/README.md) watches the whole market for price / OI /
+  volume spikes.
+- **In your own code** — `npm install binance-smart-money-oi-monitor`, then
+  `getSmartMoneyOverview('BTCUSDT')`.
 
-## Rate-limit safety
+## Good to know
 
-The endpoint sits on Binance's web `bapi` gateway, which bans aggressively (one
-careless burst earned a ~4-hour `Retry-After` in testing). A 7-layer guard is
-on by default — `Retry-After` parsing, weight budgeting, pre-flight pings,
-jittered spacing, exponential backoff, a circuit breaker, and caching. Details
-in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+- **Where the data comes from** — Binance's own "Smart Signal" web page. That
+  page blocks aggressive requests, so this tool has built-in protection to keep
+  you from getting blocked.
+- **In a blocked region?** Set `HTTPS_PROXY=http://host:port` and it routes through your proxy.
+- **Not financial advice.** Whale positioning is *context*, not a signal. Trade
+  at your own risk.
 
-## Documentation
+More detail: [Deployment & config](docs/DEPLOYMENT.md) ·
+[Getting started](GUIDE.md) · [Troubleshooting](TROUBLESHOOTING.md)
 
-- [Getting-Started Guide (中文)](GUIDE.zh-CN.md) — 5-minute walkthrough with real examples
-- [Deployment & configuration](docs/DEPLOYMENT.md) — clone setup, tracker, dashboard, env vars, pm2, architecture
-- [Troubleshooting](TROUBLESHOOTING.md) — every gotcha actually hit, with fixes
-- [altmonitor](altmonitor/README.md) — the Python full-market alert bot
+## About the author
+
+Built and maintained by **Bennie** — crypto trader & trading-tools builder.
+
+- 🐦 X / Twitter: [@0xBenniee](https://x.com/0xBenniee)
+- 💬 Telegram: [@OxBennie](https://t.me/OxBennie)
+- 🏷️ Brand: **Bennie Strategy**
+
+Questions, ideas, or bugs? Reach out on X or Telegram, or open an issue here.
 
 ## Credits & license
 
-Original endpoint reverse-engineering by
-[andychien555/binance-smart-money-tracker](https://github.com/andychien555/binance-smart-money-tracker);
-contract confirmed by
-[BNSmartMoneyMonitor](https://github.com/y18929284608-byte/BNSmartMoneyMonitor)
+Endpoint first reverse-engineered by
+[andychien555](https://github.com/andychien555/binance-smart-money-tracker);
+confirmed by [BNSmartMoneyMonitor](https://github.com/y18929284608-byte/BNSmartMoneyMonitor)
 and [opentrade](https://github.com/6551Team/opentrade).
 
-MIT — see [LICENSE](LICENSE). Issues and PRs welcome:
-[X @0xBenniee](https://x.com/0xBenniee) · [Telegram @OxBennie](https://t.me/OxBennie).
+MIT — see [LICENSE](LICENSE). Issues and PRs welcome.

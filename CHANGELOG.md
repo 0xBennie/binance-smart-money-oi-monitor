@@ -2,6 +2,37 @@
 
 All notable changes. Versions follow semver; dates are UTC.
 
+## 1.13.0
+
+Clearer errors, honest signal recency, and a friendlier first read. No breaking
+API changes; one additive field on `get_full_picture`.
+
+**Added**
+- `signalDayAgeHours` on `get_full_picture` — how old Binance's daily Smart Money
+  signal is (the sibling `get_smart_money` already reported it). Surfaces the
+  daily-signal recency in the one-shot call, so entry/profit numbers are never
+  mistaken for real-time.
+- English `GUIDE.md` (mirrors `GUIDE.zh-CN.md`), linked from the English README,
+  plus an English shareable-card preview image.
+
+**Fixed**
+- A failed fetch to Binance — a connection timeout, or a non-2xx such as `503`
+  from a geo/edge block — was misreported as "the symbol may be unsupported",
+  sending exactly the geo-restricted users who need `HTTPS_PROXY` the wrong way.
+  It now reports Binance as unreachable and points to `HTTPS_PROXY` / a reachable
+  region. Only a genuine 2xx-empty response is reported as an unsupported symbol.
+
+**Changed**
+- READMEs rewritten to be shorter and plain-language: a "what is this" lede, a
+  concrete KAITO example that matches the preview card, install steps for Claude
+  Code / Cursor / other MCP clients and from a clone, an author section, and a
+  note that Smart Money is a daily signal (refreshes ~once a day, not per second).
+
+**Internal**
+- Reachability tracked on the shared Binance HTTP client via a response
+  interceptor; regression tests cover the network-error vs unsupported-symbol
+  classification.
+
 ## 1.12.1
 
 Data-only pass: every user-facing output now reports numbers without editorial
